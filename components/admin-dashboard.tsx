@@ -105,6 +105,7 @@ export function AdminDashboard() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const codeId = String(form.get("codeId") ?? "");
+    const plannedDate = String(form.get("plannedDate") ?? "");
     const files = form.getAll("files").filter((file): file is File => file instanceof File && file.size > 0);
     let preparedPaths: string[] = [];
 
@@ -136,6 +137,7 @@ export function AdminDashboard() {
         body: JSON.stringify({
           action: "complete",
           codeId,
+          plannedDate,
           documents: prepared.uploads.map(uploadItem => ({ path: uploadItem.path, title: uploadItem.title })),
         }),
       });
@@ -216,6 +218,7 @@ export function AdminDashboard() {
           <p className="mt-1 text-sm leading-6 text-slate-500">Envie até 20 PDFs por vez, com até 50 MB cada, para o usuário selecionado.</p>
           <form onSubmit={upload} className="mt-6 space-y-5">
             <label className="block text-sm font-semibold text-slate-700">Usuário<select required name="codeId" defaultValue="" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><option value="" disabled>Selecione um usuário</option>{codes.filter(code => code.ativo).map(code => <option key={code.id} value={code.id}>{code.codigo} — {code.descricao}</option>)}</select></label>
+            <label className="block text-sm font-semibold text-slate-700">Data planejada<input required name="plannedDate" type="date" className="mt-2 block w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" /></label>
             <label className="block text-sm font-semibold text-slate-700">Arquivos PDF<input required multiple name="files" type="file" accept="application/pdf,.pdf" className="mt-2 block w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:font-semibold file:text-brand-700" /><span className="mt-2 block text-xs font-normal text-slate-400">Use Ctrl ou Shift para selecionar vários arquivos.</span></label>
             <button disabled={busy === "upload" || !codes.some(code => code.ativo)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-3.5 font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50">{busy === "upload" && <LoaderCircle className="animate-spin" size={18} />} Enviar PDFs</button>
           </form>

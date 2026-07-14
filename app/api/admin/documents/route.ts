@@ -17,8 +17,8 @@ export async function POST(request: NextRequest) {
   if (unauthorized) return unauthorized;
 
   try {
-    const body = await request.json() as { action?: string; codeId?: string; files?: unknown; documents?: unknown };
-    if (body.action === "complete") return completeUpload(body.codeId ?? "", body.documents);
+    const body = await request.json() as { action?: string; codeId?: string; files?: unknown; documents?: unknown; plannedDate?: string };
+    if (body.action === "complete") return completeUpload(body.codeId ?? "", body.documents, body.plannedDate ?? "");
     return prepareUpload(body.codeId ?? "", body.files);
   } catch (error) {
     return adminError(error, "Não foi possível preparar o upload.");
@@ -74,14 +74,14 @@ async function prepareUpload(codeId: string, rawFiles: unknown) {
   return NextResponse.json({ uploads, bucket: bucketName() });
 }
 
-async function completeUpload(codeId: string, rawDocuments: unknown) {
+async function completeUpload(codeId: string, rawDocuments: unknown, plannedDate: string) {
   if (!UUID.test(codeId) || !Array.isArray(rawDocuments) || rawDocuments.length === 0 || rawDocuments.length > MAX_FILES) {
     return NextResponse.json({ error: "Lote de documentos inválido." }, { status: 400 });
   }
 
   const documents = rawDocuments as CompletedFile[];
   const paths = documents.map((document) => document?.path);
-  if (!parsePaths(codeId, paths) || documents.some((document) => typeof document.title !== "string" || !document.title.trim())) {
+  if (!isValidDate(plannedDate) || !parsePaths(codeId, paths) || documents.some((document) => typeof document.title !== "string" || !document.title.trim())) {
     return NextResponse.json({ error: "Lote de documentos inválido." }, { status: 400 });
   }
 
@@ -90,8 +90,9 @@ async function completeUpload(codeId: string, rawDocuments: unknown) {
     titulo: safeTitle(document.title),
     url_arquivo: document.path,
     codigo_id: codeId,
+    data_planejada: plannedDate,
   }));
-  const { data, error } = await supabase.from("documentos_pdf").insert(rows).select("id, titulo, criado_em");
+  const { data, error } = await supabase.from("documentos_pdf").insert(rows).select("id, titulo, data_planejada, dia_semana, criado_em");
   if (error) {
     await supabase.storage.from(bucketName()).remove(paths);
     return adminError(error, "Os PDFs foram enviados, mas não puderam ser vinculados ao usuário.");
@@ -112,4 +113,11 @@ function bucketName() {
 function safeTitle(value: string) {
   const title = value.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim().slice(0, 180);
   return title || "documento.pdf";
+}
+
+function isValidDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }

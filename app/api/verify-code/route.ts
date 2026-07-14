@@ -8,6 +8,8 @@ type Documento = {
   id: string;
   titulo: string;
   url_arquivo: string;
+  data_planejada: string | null;
+  dia_semana: string | null;
   criado_em: string;
 };
 
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
     const supabase = createSupabaseAdmin();
     const { data: accessCode, error } = await supabase
       .from("codigos_acesso")
-      .select("id, descricao, ativo, expira_em, documentos_pdf(id, titulo, url_arquivo, criado_em)")
+      .select("id, descricao, ativo, expira_em, documentos_pdf(id, titulo, url_arquivo, data_planejada, dia_semana, criado_em)")
       .eq("codigo", code)
       .maybeSingle();
 
@@ -62,6 +64,8 @@ export async function POST(request: NextRequest) {
           return {
             id: document.id,
             titulo: document.titulo,
+            dataPlanejada: document.data_planejada,
+            diaSemana: document.dia_semana,
             criadoEm: document.criado_em,
             viewUrl: viewResult.data.signedUrl,
             downloadUrl: downloadResult.data.signedUrl,

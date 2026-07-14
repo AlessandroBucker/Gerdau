@@ -4,7 +4,7 @@ Aplicação Next.js para consultar PDFs por código de acesso de seis dígitos. 
 
 ## Configuração local
 
-1. Execute `supabase/migrations/001_criar_tabelas.sql` e depois `supabase/migrations/002_portal_documentos.sql` no SQL Editor do Supabase.
+1. Execute, em ordem, `supabase/migrations/001_criar_tabelas.sql`, `002_portal_documentos.sql` e `003_planejamento_documentos.sql` no SQL Editor do Supabase.
 2. Copie `.env.example` para `.env.local` e preencha as variáveis.
 3. Instale e execute:
 

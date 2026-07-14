@@ -7,6 +7,8 @@ import { readJsonResponse } from "@/lib/client-response";
 type DocumentItem = {
   id: string;
   titulo: string;
+  dataPlanejada: string | null;
+  diaSemana: string | null;
   criadoEm: string;
   viewUrl: string;
   downloadUrl: string;
@@ -142,6 +144,7 @@ export function DocumentPortal() {
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="px-5 py-4 font-semibold">Nome do arquivo</th>
+                  <th className="px-5 py-4 font-semibold">Data planejada</th>
                   <th className="px-5 py-4 font-semibold">Data de upload</th>
                   <th className="px-5 py-4 text-right font-semibold">Ação</th>
                 </tr>
@@ -155,6 +158,7 @@ export function DocumentPortal() {
                         <span className="font-semibold text-slate-800">{document.titulo}</span>
                       </div>
                     </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-500">{document.dataPlanejada ? <><span className="font-medium text-slate-700">{formatPlannedDate(document.dataPlanejada)}</span><span className="mt-0.5 block text-xs text-slate-400">{document.diaSemana}</span></> : "Não informada"}</td>
                     <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-500">{formatDate(document.criadoEm)}</td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-2">
@@ -179,4 +183,9 @@ function formatDate(value: string) {
     timeStyle: "short",
     timeZone: "America/Sao_Paulo",
   }).format(new Date(value));
+}
+
+function formatPlannedDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("pt-BR").format(new Date(year, month - 1, day, 12));
 }
