@@ -16,11 +16,11 @@ type Documento = {
 export async function POST(request: NextRequest) {
   try {
     const body: unknown = await request.json();
-    const code = typeof body === "object" && body !== null && "code" in body
-      ? String(body.code).trim()
+    const personalNumber = typeof body === "object" && body !== null && "personalNumber" in body
+      ? String(body.personalNumber).trim()
       : "";
 
-    if (!/^\d{6}$/.test(code)) {
+    if (!/^\d{8}$/.test(personalNumber)) {
       return invalidCodeResponse();
     }
 
@@ -28,11 +28,11 @@ export async function POST(request: NextRequest) {
     const { data: accessCode, error } = await supabase
       .from("codigos_acesso")
       .select("id, descricao, ativo, expira_em, documentos_pdf(id, titulo, url_arquivo, data_planejada, dia_semana, criado_em)")
-      .eq("codigo", code)
+      .eq("numero_pessoal", personalNumber)
       .maybeSingle();
 
     if (error) {
-      console.error("Erro ao consultar código:", error.message);
+      console.error("Erro ao consultar número pessoal:", error.message);
       return serverErrorResponse();
     }
 
@@ -85,14 +85,14 @@ export async function POST(request: NextRequest) {
 
 function invalidCodeResponse() {
   return NextResponse.json(
-    { error: "Código inválido, inativo ou expirado." },
+    { error: "Número Pessoal inválido, inativo ou expirado." },
     { status: 401, headers: { "Cache-Control": "no-store, max-age=0" } },
   );
 }
 
 function serverErrorResponse() {
   return NextResponse.json(
-    { error: "Não foi possível validar o código agora. Tente novamente." },
+    { error: "Não foi possível validar o Número Pessoal agora. Tente novamente." },
     { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } },
   );
 }

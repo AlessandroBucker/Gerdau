@@ -4,16 +4,16 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.codigos_acesso (
   id uuid primary key default gen_random_uuid(),
-  codigo text not null,
+  numero_pessoal text not null,
   descricao text not null,
   ativo boolean not null default true,
   criado_em timestamptz not null default now(),
 
-  constraint codigos_acesso_codigo_6_digitos_check
-    check (codigo ~ '^[0-9]{6}$'),
+  constraint codigos_acesso_numero_pessoal_8_digitos_check
+    check (numero_pessoal ~ '^[0-9]{8}$'),
 
-  constraint codigos_acesso_codigo_unique
-    unique (codigo)
+  constraint codigos_acesso_numero_pessoal_unique
+    unique (numero_pessoal)
 );
 
 create table if not exists public.documentos_pdf (
@@ -29,9 +29,9 @@ create table if not exists public.documentos_pdf (
     on delete cascade
 );
 
--- UNIQUE(codigo) já cria um índice para a busca exata pelo código.
-create index if not exists idx_codigos_acesso_codigo_ativo
-  on public.codigos_acesso (codigo)
+-- UNIQUE(numero_pessoal) já cria um índice para a busca exata.
+create index if not exists idx_codigos_acesso_numero_pessoal_ativo
+  on public.codigos_acesso (numero_pessoal)
   where ativo = true;
 
 create index if not exists idx_documentos_pdf_codigo_id

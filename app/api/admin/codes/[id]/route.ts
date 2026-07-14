@@ -39,7 +39,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const supabase = createSupabaseAdmin();
   const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "documentos-pdf";
   const { data: objects, error: listError } = await supabase.storage.from(bucket).list(id, { limit: 1000 });
-  if (listError) return adminError(listError, "Não foi possível localizar os arquivos do código.");
+  if (listError) return adminError(listError, "Não foi possível localizar os arquivos do Número Pessoal.");
 
   if (objects?.length) {
     const paths = objects.filter((item) => item.name !== ".emptyFolderPlaceholder").map((item) => `${id}/${item.name}`);
@@ -50,7 +50,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   }
 
   const { data, error } = await supabase.from("codigos_acesso").delete().eq("id", id).select("id").maybeSingle();
-  if (error) return adminError(error, "Não foi possível excluir o código.");
+  if (error) return adminError(error, "Não foi possível excluir o Número Pessoal.");
   if (!data) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

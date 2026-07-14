@@ -45,7 +45,7 @@ export async function DELETE(request: NextRequest) {
 
 async function prepareUpload(codeId: string, rawFiles: unknown) {
   if (!UUID.test(codeId) || !Array.isArray(rawFiles) || rawFiles.length === 0 || rawFiles.length > MAX_FILES) {
-    return NextResponse.json({ error: `Selecione um usuário e de 1 a ${MAX_FILES} PDFs.` }, { status: 400 });
+    return NextResponse.json({ error: `Selecione um Número Pessoal e de 1 a ${MAX_FILES} PDFs.` }, { status: 400 });
   }
 
   const files = rawFiles as RequestedFile[];
@@ -58,8 +58,8 @@ async function prepareUpload(codeId: string, rawFiles: unknown) {
   const supabase = createSupabaseAdmin();
   const { data: user, error: userError } = await supabase
     .from("codigos_acesso").select("id").eq("id", codeId).eq("ativo", true).maybeSingle();
-  if (userError) return adminError(userError, "Não foi possível validar o usuário selecionado.");
-  if (!user) return NextResponse.json({ error: "O usuário selecionado não está ativo." }, { status: 400 });
+  if (userError) return adminError(userError, "Não foi possível validar o Número Pessoal selecionado.");
+  if (!user) return NextResponse.json({ error: "O Número Pessoal selecionado não está ativo." }, { status: 400 });
 
   const uploads = [];
   for (const file of files) {
@@ -95,7 +95,7 @@ async function completeUpload(codeId: string, rawDocuments: unknown, plannedDate
   const { data, error } = await supabase.from("documentos_pdf").insert(rows).select("id, titulo, data_planejada, dia_semana, criado_em");
   if (error) {
     await supabase.storage.from(bucketName()).remove(paths);
-    return adminError(error, "Os PDFs foram enviados, mas não puderam ser vinculados ao usuário.");
+    return adminError(error, "Os PDFs foram enviados, mas não puderam ser vinculados ao Número Pessoal.");
   }
   return NextResponse.json({ documents: data, count: data.length }, { status: 201 });
 }
