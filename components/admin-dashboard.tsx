@@ -195,7 +195,33 @@ export function AdminDashboard() {
             <button disabled={busy === "create"} className="rounded-xl bg-brand-600 px-5 py-3 font-semibold text-white hover:bg-brand-700 disabled:opacity-60">Criar usuário</button>
           </form>
 
-          <div className="overflow-x-auto">
+          <div className="divide-y divide-slate-100 md:hidden">
+            {loading ? (
+              <div className="px-5 py-12 text-center text-slate-400"><LoaderCircle className="mx-auto animate-spin" /></div>
+            ) : codes.length === 0 ? (
+              <div className="px-5 py-12 text-center text-slate-400">Nenhum usuário cadastrado.</div>
+            ) : codes.map(code => (
+              <article key={code.id} className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-xl font-bold tracking-wider text-slate-900">{code.codigo}</p>
+                    <h3 className="mt-1 break-words font-semibold text-slate-700">{code.descricao}</h3>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${code.ativo ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{code.ativo ? "Ativo" : "Inativo"}</span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-sm">
+                  <div><span className="block text-xs text-slate-400">Criação</span><span className="font-medium text-slate-600">{new Date(code.criado_em).toLocaleDateString("pt-BR")}</span></div>
+                  <div><span className="block text-xs text-slate-400">Documentos</span><span className="font-medium text-slate-600">{code.documentos_pdf?.[0]?.count ?? 0} PDF(s)</span></div>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button disabled={busy === code.id} onClick={() => void toggle(code)} className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-40"><Power size={17} /> {code.ativo ? "Desativar" : "Ativar"}</button>
+                  <button disabled={busy === code.id} onClick={() => void remove(code)} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-100 px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40"><Trash2 size={17} /> Excluir</button>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[650px] text-left">
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Usuário</th><th className="px-5 py-3">Nome / descrição</th><th className="px-5 py-3">Criação</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
