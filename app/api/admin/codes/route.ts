@@ -12,7 +12,7 @@ export async function GET() {
     .select("id, codigo, descricao, ativo, criado_em, expira_em, documentos_pdf(count)")
     .order("criado_em", { ascending: false });
 
-  if (error) return adminError(error, "Não foi possível carregar os códigos.");
+  if (error) return adminError(error, "Não foi possível carregar os usuários.");
   return NextResponse.json({ codes: data }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -42,11 +42,11 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (!error) return NextResponse.json({ code: data }, { status: 201 });
-      if (error.code !== "23505") return adminError(error, "Não foi possível criar o código.");
-      if (requestedCode) return NextResponse.json({ error: "Esse código já está em uso." }, { status: 409 });
+      if (error.code !== "23505") return adminError(error, "Não foi possível criar o usuário.");
+      if (requestedCode) return NextResponse.json({ error: "Esse identificador de usuário já está em uso." }, { status: 409 });
     }
-    return NextResponse.json({ error: "Não foi possível gerar um código único. Tente novamente." }, { status: 409 });
+    return NextResponse.json({ error: "Não foi possível gerar um identificador único. Tente novamente." }, { status: 409 });
   } catch (error) {
-    return adminError(error, "Não foi possível criar o código.");
+    return adminError(error, "Não foi possível criar o usuário.");
   }
 }

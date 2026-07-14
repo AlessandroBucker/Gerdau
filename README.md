@@ -36,6 +36,8 @@ Importe a pasta `portal-pdfs` como projeto e cadastre estas variáveis no ambien
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL` (a mesma URL do projeto)
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (chave publicável, segura para o navegador)
 - `SUPABASE_STORAGE_BUCKET` (`documentos-pdf`)
 - `SIGNED_URL_TTL_SECONDS` (`300`, por exemplo)
 - `ADMIN_USERNAME`
@@ -43,6 +45,8 @@ Importe a pasta `portal-pdfs` como projeto e cadastre estas variáveis no ambien
 - `ADMIN_SESSION_SECRET` (valor aleatório com pelo menos 32 caracteres)
 
 Nunca prefixe a service role com `NEXT_PUBLIC_`. Ela deve existir somente no ambiente do servidor.
+
+O upload administrativo múltiplo usa URLs temporárias assinadas. Por isso o navegador recebe apenas a URL do projeto e a chave publicável; a chave secreta continua restrita ao backend. São aceitos até 20 PDFs por lote, com até 50 MB por arquivo.
 
 ## Administração
 

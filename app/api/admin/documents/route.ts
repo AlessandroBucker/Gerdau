@@ -4,57 +4,109 @@ import { adminError, requireAdmin } from "@/lib/admin-api";
 import { createSupabaseAdmin } from "@/lib/supabase-admin";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const MAX_SIZE = 50 * 1024 * 1024;
+const OBJECT_PATH = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.pdf$/i;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_FILES = 20;
 
+type RequestedFile = { name: string; size: number; type: string };
+type CompletedFile = { path: string; title: string };
+
+// Cria autorizações temporárias. Os PDFs não atravessam a função da Vercel.
 export async function POST(request: NextRequest) {
   const unauthorized = await requireAdmin();
   if (unauthorized) return unauthorized;
 
   try {
-    const form = await request.formData();
-    const file = form.get("file");
-    const codeId = String(form.get("codeId") ?? "");
-    if (!(file instanceof File) || !UUID.test(codeId)) {
-      return NextResponse.json({ error: "Selecione um código e um arquivo PDF." }, { status: 400 });
-    }
-    if (file.size === 0 || file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "O PDF deve ter no máximo 50 MB." }, { status: 400 });
-    }
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const header = new TextDecoder("ascii").decode(bytes.slice(0, 5));
-    if (file.type !== "application/pdf" || header !== "%PDF-") {
-      return NextResponse.json({ error: "O arquivo enviado não é um PDF válido." }, { status: 400 });
-    }
-
-    const supabase = createSupabaseAdmin();
-    const { data: accessCode, error: codeError } = await supabase
-      .from("codigos_acesso").select("id").eq("id", codeId).eq("ativo", true).maybeSingle();
-    if (codeError) return adminError(codeError, "Não foi possível validar o código selecionado.");
-    if (!accessCode) return NextResponse.json({ error: "O código selecionado não está ativo." }, { status: 400 });
-
-    const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "documentos-pdf";
-    const objectPath = `${codeId}/${randomUUID()}.pdf`;
-    const { error: uploadError } = await supabase.storage.from(bucket).upload(objectPath, bytes, {
-      contentType: "application/pdf",
-      cacheControl: "3600",
-      upsert: false,
-    });
-    if (uploadError) return adminError(uploadError, "Não foi possível enviar o PDF.");
-
-    const title = safeTitle(file.name);
-    const { data, error: insertError } = await supabase
-      .from("documentos_pdf")
-      .insert({ titulo: title, url_arquivo: objectPath, codigo_id: codeId })
-      .select("id, titulo, criado_em")
-      .single();
-    if (insertError) {
-      await supabase.storage.from(bucket).remove([objectPath]);
-      return adminError(insertError, "O arquivo foi enviado, mas não pôde ser vinculado.");
-    }
-    return NextResponse.json({ document: data }, { status: 201 });
+    const body = await request.json() as { action?: string; codeId?: string; files?: unknown; documents?: unknown };
+    if (body.action === "complete") return completeUpload(body.codeId ?? "", body.documents);
+    return prepareUpload(body.codeId ?? "", body.files);
   } catch (error) {
-    return adminError(error, "Não foi possível processar o upload.");
+    return adminError(error, "Não foi possível preparar o upload.");
   }
+}
+
+export async function DELETE(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
+  try {
+    const body = await request.json() as { codeId?: string; paths?: unknown };
+    const paths = parsePaths(body.codeId ?? "", body.paths);
+    if (!paths) return NextResponse.json({ error: "Arquivos de limpeza inválidos." }, { status: 400 });
+    if (paths.length) {
+      const { error } = await createSupabaseAdmin().storage.from(bucketName()).remove(paths);
+      if (error) return adminError(error, "Não foi possível limpar o lote incompleto.");
+    }
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return adminError(error, "Não foi possível limpar o lote incompleto.");
+  }
+}
+
+async function prepareUpload(codeId: string, rawFiles: unknown) {
+  if (!UUID.test(codeId) || !Array.isArray(rawFiles) || rawFiles.length === 0 || rawFiles.length > MAX_FILES) {
+    return NextResponse.json({ error: `Selecione um usuário e de 1 a ${MAX_FILES} PDFs.` }, { status: 400 });
+  }
+
+  const files = rawFiles as RequestedFile[];
+  for (const file of files) {
+    if (!file || typeof file.name !== "string" || !Number.isInteger(file.size) || file.size <= 0 || file.size > MAX_FILE_SIZE || file.type !== "application/pdf") {
+      return NextResponse.json({ error: "Cada arquivo deve ser um PDF válido de até 50 MB." }, { status: 400 });
+    }
+  }
+
+  const supabase = createSupabaseAdmin();
+  const { data: user, error: userError } = await supabase
+    .from("codigos_acesso").select("id").eq("id", codeId).eq("ativo", true).maybeSingle();
+  if (userError) return adminError(userError, "Não foi possível validar o usuário selecionado.");
+  if (!user) return NextResponse.json({ error: "O usuário selecionado não está ativo." }, { status: 400 });
+
+  const uploads = [];
+  for (const file of files) {
+    const path = `${codeId}/${randomUUID()}.pdf`;
+    const { data, error } = await supabase.storage.from(bucketName()).createSignedUploadUrl(path);
+    if (error) {
+      return adminError(error, "Não foi possível autorizar todos os uploads.");
+    }
+    uploads.push({ path, token: data.token, title: safeTitle(file.name) });
+  }
+
+  return NextResponse.json({ uploads, bucket: bucketName() });
+}
+
+async function completeUpload(codeId: string, rawDocuments: unknown) {
+  if (!UUID.test(codeId) || !Array.isArray(rawDocuments) || rawDocuments.length === 0 || rawDocuments.length > MAX_FILES) {
+    return NextResponse.json({ error: "Lote de documentos inválido." }, { status: 400 });
+  }
+
+  const documents = rawDocuments as CompletedFile[];
+  const paths = documents.map((document) => document?.path);
+  if (!parsePaths(codeId, paths) || documents.some((document) => typeof document.title !== "string" || !document.title.trim())) {
+    return NextResponse.json({ error: "Lote de documentos inválido." }, { status: 400 });
+  }
+
+  const supabase = createSupabaseAdmin();
+  const rows = documents.map((document) => ({
+    titulo: safeTitle(document.title),
+    url_arquivo: document.path,
+    codigo_id: codeId,
+  }));
+  const { data, error } = await supabase.from("documentos_pdf").insert(rows).select("id, titulo, criado_em");
+  if (error) {
+    await supabase.storage.from(bucketName()).remove(paths);
+    return adminError(error, "Os PDFs foram enviados, mas não puderam ser vinculados ao usuário.");
+  }
+  return NextResponse.json({ documents: data, count: data.length }, { status: 201 });
+}
+
+function parsePaths(codeId: string, rawPaths: unknown) {
+  if (!UUID.test(codeId) || !Array.isArray(rawPaths) || rawPaths.length > MAX_FILES) return null;
+  const paths = rawPaths.map(String);
+  return paths.every((path) => OBJECT_PATH.test(path) && path.startsWith(`${codeId}/`)) ? paths : null;
+}
+
+function bucketName() {
+  return process.env.SUPABASE_STORAGE_BUCKET ?? "documentos-pdf";
 }
 
 function safeTitle(value: string) {

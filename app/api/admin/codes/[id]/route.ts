@@ -23,7 +23,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .select("id, ativo")
       .maybeSingle();
     if (error) return adminError(error, "Não foi possível alterar o status.");
-    if (!data) return NextResponse.json({ error: "Código não encontrado." }, { status: 404 });
+    if (!data) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
     return NextResponse.json({ code: data });
   } catch (error) {
     return adminError(error, "Não foi possível alterar o status.");
@@ -51,6 +51,6 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
   const { data, error } = await supabase.from("codigos_acesso").delete().eq("id", id).select("id").maybeSingle();
   if (error) return adminError(error, "Não foi possível excluir o código.");
-  if (!data) return NextResponse.json({ error: "Código não encontrado." }, { status: 404 });
+  if (!data) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
