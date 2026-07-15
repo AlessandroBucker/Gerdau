@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { FileUp, KeyRound, LoaderCircle, LogOut, Power, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { CalendarDays, FileUp, KeyRound, LoaderCircle, LogOut, Power, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { readJsonResponse } from "@/lib/client-response";
@@ -177,7 +178,10 @@ export function AdminDashboard() {
           <div className="flex items-center gap-2 text-sm font-semibold text-brand-600"><ShieldCheck size={18} /> Área administrativa</div>
           <h1 className="mt-1 text-3xl font-bold text-slate-900">Controle de documentos</h1>
         </div>
-        <button onClick={logout} className="flex w-fit items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-white hover:text-slate-800"><LogOut size={16} /> Sair</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/admin/programacao" className="flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"><CalendarDays size={17} /> Visualizar programações</Link>
+          <button onClick={logout} className="flex w-fit items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-white hover:text-slate-800"><LogOut size={16} /> Sair</button>
+        </div>
       </header>
 
       {message && <div role="status" className={`mb-6 rounded-xl border px-4 py-3 text-sm font-medium ${message.type === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}>{message.text}</div>}
