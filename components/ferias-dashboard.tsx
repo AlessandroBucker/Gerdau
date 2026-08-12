@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, LoaderCircle, LockKeyhole, Palmtree, Pencil, Plus, X } from "lucide-react";
+import { DataLoading } from "@/components/data-loading";
 
 type Vacation = { id: string; area: string; nome: string; np: string; inicio: string; fim: string };
 type SortKey = "area" | "nome" | "np" | "inicio" | "fim" | "dias" | "status";
@@ -30,12 +31,14 @@ export function FeriasDashboard() {
   const [vacations, setVacations] = useState<Vacation[]>([]);
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "inicio", direction: "asc" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [authAction, setAuthAction] = useState<"add" | "edit" | null>(null);
   const [editing, setEditing] = useState<Vacation | null | "new">(null);
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetch("/api/rotina/vacations", { cache: "no-store" }).then(response => response.json()).then(data => { if (data.vacations) setVacations(data.vacations); }); }, []);
+  useEffect(() => { fetch("/api/rotina/vacations", { cache: "no-store" }).then(response => response.json()).then(data => { if (data.vacations) setVacations(data.vacations); }).finally(() => setLoading(false)); }, []);
 
   const sorted = useMemo(() => [...vacations].sort((a, b) => {
     const value = (item: Vacation) => sort.key === "dias" ? daysBetween(item.inicio, item.fim) : sort.key === "status" ? statusOf(item) : item[sort.key];
@@ -53,6 +56,16 @@ export function FeriasDashboard() {
     if (action === "edit" && selectedId === null) return;
     setAuthError("");
     setAuthAction(action);
+  }
+
+  function openDetails(id: string) {
+    setSelectedId(id);
+    setViewingId(id);
+  }
+
+  function editFromDetails() {
+    setViewingId(null);
+    requestAccess("edit");
   }
 
   async function authenticate(event: FormEvent<HTMLFormElement>) {
@@ -97,9 +110,7 @@ export function FeriasDashboard() {
   return (
     <div>
       <header className="mb-8">
-        <p className="text-sm font-bold uppercase tracking-[0.14em] text-brand-600">Rotina operacional</p>
-        <div className="mt-2 flex items-center gap-3"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Palmtree size={24} /></span><h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Férias de colaboradores</h1></div>
-        <p className="mt-3 max-w-2xl text-base leading-7 text-slate-500">Planejamento e acompanhamento dos períodos de férias da equipe.</p>
+        <div className="flex items-center gap-3"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Palmtree size={24} /></span><h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Férias de colaboradores</h1></div>
       </header>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
@@ -107,21 +118,30 @@ export function FeriasDashboard() {
           <div><h2 className="text-lg font-bold text-slate-900">Programação de férias</h2><p className="mt-1 text-sm text-slate-500">Clique em qualquer título para reorganizar a tabela.</p></div>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => requestAccess("add")} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700"><Plus size={17} /> Adicionar férias</button>
-            <button disabled={selectedId === null} onClick={() => requestAccess("edit")} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><Pencil size={16} /> Editar férias</button>
           </div>
         </div>
-        <VacationTable items={current} selectedId={selectedId} onSelect={setSelectedId} sort={sort} onSort={changeSort} emptyText="Nenhuma programação futura encontrada." />
+        {loading ? <DataLoading label="Carregando férias..." compact /> : <VacationTable items={current} selectedId={selectedId} onSelect={openDetails} sort={sort} onSort={changeSort} emptyText="Nenhuma programação futura encontrada." />}
       </section>
 
       <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
         <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h2 className="text-lg font-bold text-slate-900">Férias anteriores</h2><p className="mt-1 text-sm text-slate-500">Histórico de períodos já concluídos.</p></div>
-        <VacationTable items={previous} selectedId={selectedId} onSelect={setSelectedId} sort={sort} onSort={changeSort} emptyText="Ainda não há férias anteriores cadastradas." />
+        {loading ? <DataLoading label="Carregando histórico..." compact /> : <VacationTable items={previous} selectedId={selectedId} onSelect={openDetails} sort={sort} onSort={changeSort} emptyText="Ainda não há férias anteriores cadastradas." />}
       </section>
 
+      {viewingId && vacations.find(item => item.id === viewingId) && <VacationDetails item={vacations.find(item => item.id === viewingId)!} onClose={() => setViewingId(null)} onEdit={editFromDetails} />}
       {authAction && <AuthModal loading={authLoading} error={authError} onClose={() => setAuthAction(null)} onSubmit={authenticate} />}
       {editing && <VacationForm item={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSubmit={saveVacation} />}
     </div>
   );
+}
+
+function VacationDetails({ item, onClose, onEdit }: { item: Vacation; onClose: () => void; onEdit: () => void }) {
+  const status = statusOf(item);
+  return <Modal title="Detalhes das férias" onClose={onClose} icon={<Palmtree size={21} />}><div className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2"><Detail label="Área" value={item.area} /><Detail label="Colaborador" value={item.nome} /><Detail label="NP" value={item.np || "Não informado"} /><Detail label="Status" value={status} /><Detail label="Data de início" value={formatDate(item.inicio)} /><Detail label="Data de fim" value={formatDate(item.fim)} /><Detail label="Dias de férias" value={String(daysBetween(item.inicio, item.fim))} /></div><button onClick={onEdit} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 font-bold text-white hover:bg-brand-700"><Pencil size={17} /> Editar informações</button></Modal>;
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return <div className="bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-1 font-semibold text-slate-800">{value}</p></div>;
 }
 
 function VacationTable({ items, selectedId, onSelect, sort, onSort, emptyText }: { items: Vacation[]; selectedId: string | null; onSelect: (id: string) => void; sort: { key: SortKey; direction: "asc" | "desc" }; onSort: (key: SortKey) => void; emptyText: string }) {
