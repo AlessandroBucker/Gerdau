@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { CalendarClock, Factory, Pencil, Plus, X } from "lucide-react";
+import { DataLoading } from "@/components/data-loading";
+import { useRouter } from "next/navigation";
 
 type Stop = { id?: string; area: string; tipo: string; inicio: string; horaInicio: string; fim: string; horaFim: string };
 
@@ -12,11 +14,12 @@ function DateTime({ date, time }: { date: string; time: string }) {
 }
 
 export default function ParadasPage() {
+  const router = useRouter();
   const [stops, setStops] = useState<Stop[]>([]);
-  const [viewing, setViewing] = useState<number | null>(null);
   const [editing, setEditing] = useState<number | "new" | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetch("/api/rotina/stops", { cache: "no-store" }).then(response => response.json()).then(data => { if (data.stops) setStops(data.stops); }); }, []);
+  useEffect(() => { fetch("/api/rotina/stops", { cache: "no-store" }).then(response => response.json()).then(data => { if (data.stops) setStops(data.stops); }).finally(() => setLoading(false)); }, []);
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,10 +35,9 @@ export default function ParadasPage() {
     <header className="mb-6 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="grid h-12 w-12 place-items-center rounded-xl bg-rose-50 text-rose-600"><Factory size={24} /></span><h1 className="text-3xl font-bold tracking-tight text-slate-950">Paradas</h1></div><button onClick={() => setEditing("new")} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700"><Plus size={18} /> Adicionar parada</button></header>
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
       <div className="border-b border-slate-100 px-5 py-4"><h2 className="text-lg font-bold text-slate-900">Programação de paradas</h2><p className="mt-1 text-sm text-slate-500">{stops.length} eventos cadastrados · Clique em uma linha para visualizar.</p></div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Área</th><th className="px-5 py-3">Tipo de parada</th><th className="px-5 py-3">Início</th><th className="px-5 py-3">Fim</th></tr></thead><tbody className="divide-y divide-slate-200">{stops.map((item, index) => <tr key={`${item.area}-${index}`} onClick={() => setViewing(index)} className="cursor-pointer hover:bg-rose-50/50"><td className="px-5 py-4"><span className="rounded-lg bg-rose-50 px-2.5 py-1 text-sm font-bold text-rose-700">{item.area}</span></td><td className="px-5 py-4 font-semibold text-slate-800">{item.tipo}</td><td className="px-5 py-4"><DateTime date={item.inicio} time={item.horaInicio} /></td><td className="px-5 py-4"><DateTime date={item.fim} time={item.horaFim} /></td></tr>)}</tbody></table></div>
+      {loading ? <DataLoading label="Carregando paradas..." compact /> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Área</th><th className="px-5 py-3">Tipo de parada</th><th className="px-5 py-3">Início</th><th className="px-5 py-3">Fim</th></tr></thead><tbody className="divide-y divide-slate-200">{stops.map((item, index) => <tr key={`${item.area}-${index}`} onClick={() => item.id && router.push(`/ROTINA/paradas/${item.id}`)} className="cursor-pointer hover:bg-rose-50/50"><td className="px-5 py-4"><span className="rounded-lg bg-rose-50 px-2.5 py-1 text-sm font-bold text-rose-700">{item.area}</span></td><td className="px-5 py-4 font-semibold text-slate-800">{item.tipo}</td><td className="px-5 py-4"><DateTime date={item.inicio} time={item.horaInicio} /></td><td className="px-5 py-4"><DateTime date={item.fim} time={item.horaFim} /></td></tr>)}</tbody></table></div>}
     </section>
 
-    {viewing !== null && stops[viewing] && <Details stop={stops[viewing]} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
     {editing !== null && <StopForm stop={editing === "new" ? null : stops[editing]} onClose={() => setEditing(null)} onSubmit={save} />}
   </div>;
 }
