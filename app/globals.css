@@ -31,3 +31,21 @@ a:focus-visible {
   outline: 3px solid rgba(22, 131, 216, 0.3);
   outline-offset: 2px;
 }
+
+@media print {
+  @page { size: landscape; margin: 7mm; }
+  body { background: white !important; }
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  aside, header, .table-toolbar { display: none !important; }
+  .print-table-page { width: 100% !important; }
+  .print-table-page section { border: 0 !important; box-shadow: none !important; }
+  .print-table-page table { font-size: 7px !important; }
+  .print-table-page th, .print-table-page td { padding: 2px 3px !important; }
+  .calendar-print-hide { display: none !important; }
+  .calendar-team-print { display: block !important; border-color: #cbd5e1 !important; box-shadow: none !important; }
+  .calendar-print-area { border: 0 !important; box-shadow: none !important; }
+  .calendar-print-area .space-y-7 { gap: 8mm !important; }
+}
