@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Menu,
   PackageCheck,
+  PanelsTopLeft,
   Palmtree,
   PanelLeftClose,
   PanelLeftOpen,
@@ -20,13 +21,14 @@ const navigation = [
   { label: "Visão geral", href: "/ROTINA", icon: LayoutDashboard },
   { label: "Férias de colaboradores", href: "/ROTINA/ferias", icon: Palmtree },
   { label: "Conjuntos reservas", href: "/ROTINA/conjuntos-reservas", icon: PackageCheck },
+  { label: "Conjuntos sobressalentes", href: "/ROTINA/conjuntos-sobressalentes", icon: PanelsTopLeft },
   { label: "Calendário do plantão", href: "/ROTINA/calendario-plantao", icon: CalendarDays },
   { label: "Paradas", href: "/ROTINA/paradas", icon: Factory },
 ];
 
 export function RotinaShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const widePage = pathname === "/ROTINA/conjuntos-reservas" || pathname === "/ROTINA/calendario-plantao";
+  const widePage = pathname === "/ROTINA/conjuntos-reservas" || pathname === "/ROTINA/conjuntos-sobressalentes" || pathname === "/ROTINA/calendario-plantao" || pathname.startsWith("/ROTINA/paradas/");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCollapsed, setMenuCollapsed] = useState(widePage);
 

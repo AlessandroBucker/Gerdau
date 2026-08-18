@@ -34,6 +34,7 @@ a:focus-visible {
 
 @media print {
   @page { size: landscape; margin: 7mm; }
+  @page stopSchedule { size: A4 portrait; margin: 6mm; }
   body { background: white !important; }
   *, *::before, *::after {
     -webkit-print-color-adjust: exact !important;
@@ -79,4 +80,32 @@ a:focus-visible {
     margin-top: 0 !important;
     padding-top: 4mm !important;
   }
+  body:has(.stop-schedule-print) * { visibility: hidden !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print,
+  body:has(.stop-schedule-print) .stop-schedule-print * { visibility: visible !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    page: stopSchedule;
+  }
+  body:has(.stop-schedule-print) .stop-schedule-print > header {
+    display: flex !important;
+    margin-bottom: 3mm !important;
+  }
+  body:has(.stop-schedule-print) .stop-print-hide,
+  body:has(.stop-schedule-print) .stop-schedule-print button { display: none !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print section {
+    box-shadow: none !important;
+    border-color: #94a3b8 !important;
+  }
+  body:has(.stop-schedule-print) .stop-schedule-table { overflow: visible !important; }
+  body:has(.stop-schedule-print) .stop-schedule-table table {
+    min-width: 0 !important;
+    width: 100% !important;
+    font-size: 6.5pt !important;
+  }
+  body:has(.stop-schedule-print) .stop-schedule-table th,
+  body:has(.stop-schedule-print) .stop-schedule-table td { padding: 1.5mm 2mm !important; }
+  body:has(.stop-schedule-print) .stop-schedule-table tr { break-inside: avoid; }
 }

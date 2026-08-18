@@ -121,9 +121,8 @@ from public.eventos e
 join public.tipos_evento t on t.id = e.tipo_evento_id and t.slug = 'parada'
 join public.areas a on a.id = e.area_id and a.nome = 'LPP'
 cross join (values
-  (1, 'Central de solda', 'Mecânica', '', 'Revisão completa da STREKER', 'WISLEY', ''),
-  (2, 'Central de solda', 'Elétrica', '', 'Revisão completa da STREKER', 'DANIEL', ''),
-  (3, 'Edireitadeira', 'Elétrica', '81820109', 'P-E-2M MÁQUINA ENDIREIT. MALMEDIE LPP', 'WISLEY', 'WISLEY'),
+  (1, 'Central de solda', 'Mecânica', '', 'Revisão completa da STREKER', 'WISLEY', 'WISLEY'),
+  (2, 'Central de solda', 'Elétrica', '', 'Revisão completa da STREKER', 'DANIEL', 'DANIEL'),
   (4, 'Edireitadeira', 'Mecânica', '', 'Limpar base da endireitadeira', 'Ricardo', 'Ricardo'),
   (5, 'Edireitadeira', 'Lubrificação', '82197520', 'P-L-1S-ENDIREITADEIRA GSG', 'Ricardo', 'Ricardo'),
   (6, 'Laminador', 'Lubrificação', '64213208', 'TROCAR ÓLEO REDUTORES GAIOLA 1', 'LUCAS', 'LUCAS E JONES'),

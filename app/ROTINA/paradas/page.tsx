@@ -18,17 +18,28 @@ export default function ParadasPage() {
   const [stops, setStops] = useState<Stop[]>([]);
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => { fetch("/api/rotina/stops", { cache: "no-store" }).then(response => response.json()).then(data => { if (data.stops) setStops(data.stops); }).finally(() => setLoading(false)); }, []);
 
-  function save(event: FormEvent<HTMLFormElement>) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const stop: Stop = { area: String(form.get("area")), tipo: String(form.get("tipo")), inicio: String(form.get("inicio")), horaInicio: String(form.get("horaInicio")), fim: String(form.get("fim")), horaFim: String(form.get("horaFim")) };
-    if (stop.fim < stop.inicio) return;
-    if (editing === "new") setStops(current => [...current, stop]);
-    else if (typeof editing === "number") setStops(current => current.map((item, index) => index === editing ? stop : item));
-    setEditing(null);
+    setFormError("");
+    if (stop.fim < stop.inicio) { setFormError("O fim da parada deve ser posterior ao início."); return; }
+    setSaving(true);
+    try {
+      const current = typeof editing === "number" ? stops[editing] : null;
+      const response = await fetch(current?.id ? `/api/rotina/stops/${current.id}` : "/api/rotina/stops", { method: current?.id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(stop) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível salvar a parada.");
+      if (editing === "new") setStops(currentStops => [...currentStops, data.stop]);
+      else if (typeof editing === "number") setStops(currentStops => currentStops.map((item, index) => index === editing ? data.stop : item));
+      setEditing(null);
+    } catch (error) { setFormError(error instanceof Error ? error.message : "Não foi possível salvar a parada."); }
+    finally { setSaving(false); }
   }
 
   return <div>
@@ -38,7 +49,7 @@ export default function ParadasPage() {
       {loading ? <DataLoading label="Carregando paradas..." compact /> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Área</th><th className="px-5 py-3">Tipo de parada</th><th className="px-5 py-3">Início</th><th className="px-5 py-3">Fim</th></tr></thead><tbody className="divide-y divide-slate-200">{stops.map((item, index) => <tr key={`${item.area}-${index}`} onClick={() => item.id && router.push(`/ROTINA/paradas/${item.id}`)} className="cursor-pointer hover:bg-rose-50/50"><td className="px-5 py-4"><span className="rounded-lg bg-rose-50 px-2.5 py-1 text-sm font-bold text-rose-700">{item.area}</span></td><td className="px-5 py-4 font-semibold text-slate-800">{item.tipo}</td><td className="px-5 py-4"><DateTime date={item.inicio} time={item.horaInicio} /></td><td className="px-5 py-4"><DateTime date={item.fim} time={item.horaFim} /></td></tr>)}</tbody></table></div>}
     </section>
 
-    {editing !== null && <StopForm stop={editing === "new" ? null : stops[editing]} onClose={() => setEditing(null)} onSubmit={save} />}
+    {editing !== null && <StopForm stop={editing === "new" ? null : stops[editing]} saving={saving} error={formError} onClose={() => setEditing(null)} onSubmit={save} />}
   </div>;
 }
 
@@ -46,8 +57,8 @@ function Details({ stop, onClose, onEdit }: { stop: Stop; onClose: () => void; o
   return <Modal title="Detalhes da parada" onClose={onClose}><div className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2"><Detail label="Área" value={stop.area} /><Detail label="Tipo de parada" value={stop.tipo} /><Detail label="Início" value={`${formatDate(stop.inicio)}${stop.horaInicio ? ` às ${stop.horaInicio}` : ""}`} /><Detail label="Fim" value={`${formatDate(stop.fim)}${stop.horaFim ? ` às ${stop.horaFim}` : ""}`} /></div><button onClick={onEdit} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 font-bold text-white hover:bg-brand-700"><Pencil size={17} /> Editar informações</button></Modal>;
 }
 
-function StopForm({ stop, onClose, onSubmit }: { stop: Stop | null; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <Modal title={stop ? "Editar parada" : "Adicionar parada"} onClose={onClose}><form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2"><Field label="Área" name="area" defaultValue={stop?.area} /><Field label="Tipo de parada" name="tipo" defaultValue={stop?.tipo} /><Field label="Data de início" name="inicio" type="date" defaultValue={stop?.inicio} /><Field label="Hora de início" name="horaInicio" type="time" defaultValue={stop?.horaInicio} required={false} /><Field label="Data de fim" name="fim" type="date" defaultValue={stop?.fim} /><Field label="Hora de fim" name="horaFim" type="time" defaultValue={stop?.horaFim} required={false} /><div className="flex gap-2 sm:col-span-2"><button type="button" onClick={onClose} className="flex-1 rounded-xl border border-slate-200 px-4 py-3 font-bold text-slate-600">Cancelar</button><button className="flex-1 rounded-xl bg-brand-600 px-4 py-3 font-bold text-white">Salvar</button></div></form></Modal>;
+function StopForm({ stop, saving, error, onClose, onSubmit }: { stop: Stop | null; saving: boolean; error: string; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <Modal title={stop ? "Editar parada" : "Adicionar parada"} onClose={onClose}><form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2"><Field label="Área" name="area" defaultValue={stop?.area} /><Field label="Tipo de parada" name="tipo" defaultValue={stop?.tipo} /><Field label="Data de início" name="inicio" type="date" defaultValue={stop?.inicio} /><Field label="Hora de início" name="horaInicio" type="time" defaultValue={stop?.horaInicio} required={false} /><Field label="Data de fim" name="fim" type="date" defaultValue={stop?.fim} /><Field label="Hora de fim" name="horaFim" type="time" defaultValue={stop?.horaFim} required={false} />{error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 sm:col-span-2">{error}</p>}<div className="flex gap-2 sm:col-span-2"><button disabled={saving} type="button" onClick={onClose} className="flex-1 rounded-xl border border-slate-200 px-4 py-3 font-bold text-slate-600 disabled:opacity-50">Cancelar</button><button disabled={saving} className="flex-1 rounded-xl bg-brand-600 px-4 py-3 font-bold text-white disabled:opacity-50">{saving ? "Salvando..." : "Salvar"}</button></div></form></Modal>;
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
