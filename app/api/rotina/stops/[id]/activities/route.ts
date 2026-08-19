@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 type ActivityInput = {
   setor?: string; especialidade?: string; ordem?: string; descricao?: string;
   responsavel?: string; equipe?: string; observacoes?: string;
-  dataInicio?: string; horaInicio?: string; dataFim?: string; horaFim?: string;
+  dataInicio?: string; horaInicio?: string; duracaoPrevistaMinutos?: number;
 };
 
 function clean(value: unknown) {
@@ -18,17 +18,15 @@ async function activityValues(eventoId: string, body: ActivityInput) {
   const setor = clean(body.setor);
   const dataInicio = clean(body.dataInicio);
   const horaInicio = clean(body.horaInicio);
-  const dataFim = clean(body.dataFim);
-  const horaFim = clean(body.horaFim);
   if (!descricao || !setor) throw new Error("Setor e descrição da atividade são obrigatórios.");
-  if ((dataInicio && !dataFim) || (!dataInicio && dataFim)) throw new Error("Informe as datas de início e fim da atividade.");
-  let duracaoPrevistaMinutos: number | null = null;
-  if (dataInicio && dataFim) {
-    const inicio = new Date(`${dataInicio}T${horaInicio || "00:00"}:00`);
-    const fim = new Date(`${dataFim}T${horaFim || "23:59"}:00`);
-    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim < inicio) throw new Error("O fim da atividade deve ser posterior ao início.");
-    duracaoPrevistaMinutos = Math.max(0, Math.round((fim.getTime() - inicio.getTime()) / 60000));
-  }
+  const duracaoPrevistaMinutos = Number(body.duracaoPrevistaMinutos);
+  if (!dataInicio || !horaInicio) throw new Error("Informe a data e a hora de início da atividade.");
+  if (!Number.isInteger(duracaoPrevistaMinutos) || duracaoPrevistaMinutos <= 0) throw new Error("Informe um tempo de execução válido em minutos.");
+  const inicio = new Date(`${dataInicio}T${horaInicio}:00Z`);
+  if (Number.isNaN(inicio.getTime())) throw new Error("Data ou hora de início inválida.");
+  const fim = new Date(inicio.getTime() + duracaoPrevistaMinutos * 60_000);
+  const dataFim = fim.toISOString().slice(0, 10);
+  const horaFim = fim.toISOString().slice(11, 16);
 
   const supabase = createSupabaseAdmin();
   const { data: event, error: eventError } = await supabase.from("eventos").select("area_id").eq("id", eventoId).single();
@@ -43,7 +41,7 @@ async function activityValues(eventoId: string, body: ActivityInput) {
     area_id: event.area_id, setor_id: sector.id, especialidade: clean(body.especialidade) || null,
     ordem: clean(body.ordem) || null, atividade: descricao, responsavel_apr: clean(body.responsavel) || null,
     equipe: clean(body.equipe) || null, observacao: clean(body.observacoes) || null,
-    data_inicio: dataInicio || null, hora_inicio: horaInicio || null, data_fim: dataFim || null, hora_fim: horaFim || null,
+    data_inicio: dataInicio, hora_inicio: horaInicio, data_fim: dataFim, hora_fim: horaFim,
     duracao_prevista_minutos: duracaoPrevistaMinutos,
   };
 }
@@ -84,13 +82,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const { id } = await context.params;
     const body = await request.json();
     const supabase = createSupabaseAdmin();
-    const values = await activityValues(id, body);
+    const inputs: ActivityInput[] = Array.isArray(body.activities) ? body.activities : [body];
+    if (!inputs.length) return NextResponse.json({ error: "Informe ao menos uma atividade." }, { status: 400 });
+    const values = await Promise.all(inputs.map(input => activityValues(id, input)));
     const { data: last, error: sequenceError } = await supabase.from("parada_atividades")
       .select("sequencia").eq("evento_id", id).order("sequencia", { ascending: false }).limit(1).maybeSingle();
     if (sequenceError) throw sequenceError;
-    const { error } = await supabase.from("parada_atividades").insert({
-      ...values, evento_id: id, sequencia: (last?.sequencia ?? 0) + 1, status: "programada",
-    });
+    const { error } = await supabase.from("parada_atividades").insert(values.map((value, index) => ({
+      ...value, evento_id: id, sequencia: (last?.sequencia ?? 0) + index + 1, status: "programada",
+    })));
     if (error) throw error;
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {

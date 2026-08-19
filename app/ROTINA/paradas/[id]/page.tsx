@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Clock, Download, Factory, GripVertical, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Clock, Download, Factory, GripVertical, Plus, Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DataLoading } from "@/components/data-loading";
 
 type Stop = { id: string; area: string; tipo: string; inicio: string; fim: string; horaInicio: string; horaFim: string };
 type Activity = { id?: string; setor: string; especialidade: string; ordem: string; descricao: string; responsavel: string; equipe: string; observacoes: string; dataInicio?: string; horaInicio?: string; dataFim?: string; horaFim?: string; duracaoPrevistaMinutos?: number; status?: string; quantidadeReprogramacoes?: number };
-const emptyActivity: Activity = { setor: "", especialidade: "", ordem: "", descricao: "", responsavel: "", equipe: "", observacoes: "", dataInicio: "", horaInicio: "", dataFim: "", horaFim: "" };
+const emptyActivity: Activity = { setor: "", especialidade: "", ordem: "", descricao: "", responsavel: "", equipe: "", observacoes: "", dataInicio: "", horaInicio: "", duracaoPrevistaMinutos: undefined };
 
 const defaultSpecialties = [
   "Mecânica",
@@ -52,6 +52,12 @@ function formatDate(value: string) {
   if (!value) return "—";
   const [year, month, day] = value.split("-");
   return `${day}/${month}/${year}`;
+}
+
+function formatStopPeriod(stop: Stop) {
+  const start = `${formatDate(stop.inicio)}${stop.horaInicio ? ` ${stop.horaInicio}` : ""}`;
+  const end = `${stop.inicio === stop.fim ? "" : `${formatDate(stop.fim)} `}${stop.horaFim || ""}`.trim();
+  return end ? `${start} até ${end}` : start;
 }
 
 function formatDuration(minutes?: number | null, dataInicio?: string, horaInicio?: string, dataFim?: string, horaFim?: string) {
@@ -135,6 +141,7 @@ export default function StopSchedulePage() {
   const [draggedSector, setDraggedSector] = useState<string | null>(null);
   const [dragOverSector, setDragOverSector] = useState<string | null>(null);
   const [editing, setEditing] = useState<Activity | null>(null);
+  const [newActivities, setNewActivities] = useState<Activity[] | null>(null);
   const [deletingActivity, setDeletingActivity] = useState<Activity | null>(null);
   const [editingStop, setEditingStop] = useState<Stop | null>(null);
   const [saving, setSaving] = useState(false);
@@ -191,7 +198,8 @@ export default function StopSchedulePage() {
 
   function openActivity(activity?: Activity) {
     setFormError("");
-    setEditing(activity ? { ...activity } : { ...emptyActivity, dataInicio: stop?.inicio ?? "", dataFim: stop?.fim ?? "" });
+    if (activity) setEditing({ ...activity });
+    else setNewActivities([{ ...emptyActivity, dataInicio: stop?.inicio ?? "", horaInicio: stop?.horaInicio ?? "" }]);
   }
 
   function toggleSectorCollapse(sector: string) {
@@ -234,10 +242,15 @@ export default function StopSchedulePage() {
     if (!editing) return;
     setSaving(true); setFormError("");
     try {
+      const activityToSave = {
+        ...editing,
+        dataInicio: editing.dataInicio || stop?.inicio || "",
+        horaInicio: editing.horaInicio || stop?.horaInicio || "",
+      };
       const response = await fetch(`/api/rotina/stops/${params.id}/activities`, {
         method: editing.id ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editing.id ? { ...editing, action: "edit", atividadeId: editing.id } : editing),
+        body: JSON.stringify(editing.id ? { ...activityToSave, action: "edit", atividadeId: editing.id } : activityToSave),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível salvar a atividade.");
@@ -245,6 +258,27 @@ export default function StopSchedulePage() {
       setEditing(null);
     } catch (reason) {
       setFormError(reason instanceof Error ? reason.message : "Não foi possível salvar a atividade.");
+    } finally { setSaving(false); }
+  }
+
+  async function saveNewActivities() {
+    if (!newActivities?.length) return;
+    setSaving(true); setFormError("");
+    try {
+      const activitiesToSave = newActivities.map(activity => ({
+        ...activity,
+        dataInicio: activity.dataInicio || stop?.inicio || "",
+        horaInicio: activity.horaInicio || stop?.horaInicio || "",
+      }));
+      const response = await fetch(`/api/rotina/stops/${params.id}/activities`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activities: activitiesToSave }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível salvar as atividades.");
+      await reloadActivities();
+      setNewActivities(null);
+    } catch (reason) {
+      setFormError(reason instanceof Error ? reason.message : "Não foi possível salvar as atividades.");
     } finally { setSaving(false); }
   }
 
@@ -297,57 +331,26 @@ export default function StopSchedulePage() {
   }
 
   return <div className="stop-schedule-print">
-    <header className="mb-5 flex flex-wrap items-center gap-3">
+    <header className="sticky top-0 z-30 mb-5 flex flex-wrap items-center gap-3 bg-slate-50/95 py-3 backdrop-blur">
       <Link href="/ROTINA/paradas" className="stop-print-hide grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Voltar"><ArrowLeft size={20} /></Link>
       <span className="grid h-12 w-12 place-items-center rounded-xl bg-rose-50 text-rose-600"><Factory size={24} /></span>
-      <div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-wider text-rose-600">Cronograma da parada</p><h1 className="text-2xl font-bold tracking-tight text-slate-950">Parada de 8h - {stop.area} ({formatDate(stop.inicio)})</h1></div>
+      <div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-wider text-rose-600">Cronograma da parada</p><h1 className="text-2xl font-bold tracking-tight text-slate-950">{stop.tipo} ({formatStopPeriod(stop)})</h1></div>
       <button onClick={() => openActivity()} className="stop-print-hide inline-flex items-center gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm font-bold text-brand-700 shadow-sm hover:bg-brand-50"><Plus size={18} /> Incluir atividade</button>
-      <button onClick={downloadPdf} className="stop-print-hide inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-brand-700"><Download size={18} /> Baixar PDF</button>
+      <button onClick={downloadPdf} className="stop-print-hide inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-brand-700"><Download size={18} /> PDF</button>
     </header>
 
-    <section className="relative mb-4 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 pr-16 shadow-card sm:grid-cols-3">
-      <button onClick={() => { setFormError(""); setEditingStop({ ...stop }); }} className="stop-print-hide absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-brand-700" aria-label="Editar informações da parada" title="Editar informações da parada"><Pencil size={18} /></button>
-      <div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Área</p><p className="mt-1 font-bold text-slate-800">{stop.area}</p></div>
-      <div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Tipo</p><p className="mt-1 font-bold text-slate-800">{stop.tipo}</p></div>
-      <div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Período</p><p className="mt-1 inline-flex items-center gap-2 font-bold text-slate-800"><CalendarClock size={16} />{formatDate(stop.inicio)} {stop.horaInicio} até {formatDate(stop.fim)} {stop.horaFim}</p></div>
-    </section>
-
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">Atividades programadas</h2>
-          <p className="text-xs text-slate-500">Cronograma detalhado com duração e visualização Gantt por horário.</p>
-        </div>
-        {sectors.length > 0 && (
-          <div className="stop-print-hide flex items-center gap-2">
-            <button
-              type="button"
-              onClick={expandAll}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <ChevronDown size={14} /> Expandir todos
-            </button>
-            <button
-              type="button"
-              onClick={collapseAll}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <ChevronRight size={14} /> Recolher todos
-            </button>
-          </div>
-        )}
-      </div>
-
-      {activities.length ? <div className="stop-schedule-table overflow-x-auto"><table className="w-full min-w-[1250px] text-left text-sm">
-        <thead className="bg-slate-100 text-xs font-bold uppercase tracking-wide text-slate-600">
+      {activities.length ? <div className="stop-schedule-table max-h-[calc(100vh-112px)] overflow-auto"><table className="w-full min-w-[1380px] text-left text-sm">
+        <thead className="sticky top-0 z-20 bg-slate-100 text-xs font-bold uppercase tracking-wide text-slate-600 shadow-sm">
           <tr>
             <th className="w-[10%] px-3 py-3">Especialidade</th>
             <th className="w-[8%] px-3 py-3">Ordem</th>
             <th className="w-[20%] px-3 py-3">Descrição da atividade</th>
             <th className="w-[10%] px-3 py-3">Responsável</th>
             <th className="w-[9%] px-3 py-3">Equipe</th>
-            <th className="w-[7%] px-3 py-3 text-center">Duração</th>
-            <th className="w-[31%] min-w-[320px] px-3 py-2">
+            <th className="w-[12%] px-3 py-3">Observações</th>
+            <th className="w-[7%] px-3 py-3 text-center">Tempo</th>
+            <th className="w-[21%] min-w-[320px] px-3 py-2">
               <div className="flex items-center justify-between pb-1 text-[11px] font-bold text-slate-700">
                 <span className="flex items-center gap-1"><Clock size={13} className="text-brand-600" /> Cronograma Gantt</span>
                 <span className="font-mono text-[10px] font-bold text-brand-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">
@@ -371,7 +374,6 @@ export default function StopSchedulePage() {
                 ))}
               </div>
             </th>
-            <th className="stop-print-hide w-[5%] px-2 py-3 text-center">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -410,13 +412,13 @@ export default function StopSchedulePage() {
                 setDragOverSector(null);
               }}
               onSelect={openActivity}
-              onDelete={activity => setDeletingActivity(activity)}
             />
           ))}
         </tbody>
       </table></div> : <div className="grid min-h-52 place-items-center p-8 text-center"><div><CalendarClock className="mx-auto text-slate-300" size={34} /><p className="mt-3 font-semibold text-slate-500">Nenhuma atividade cadastrada para esta parada.</p></div></div>}
     </section>
     {editing && <ActivityDialog activity={editing} stop={stop} sectors={sectorOptions} specialties={specialtyOptions} responsibles={responsibleOptions} saving={saving} error={formError} onChange={setEditing} onClose={() => !saving && setEditing(null)} onSave={saveActivity} onDelete={activity => setDeletingActivity(activity)} />}
+    {newActivities && <BatchActivityDialog activities={newActivities} stop={stop} saving={saving} error={formError} onChange={setNewActivities} onClose={() => !saving && setNewActivities(null)} onSave={saveNewActivities} />}
     {editingStop && <StopDialog stop={editingStop} saving={saving} error={formError} onChange={setEditingStop} onClose={() => !saving && setEditingStop(null)} onSave={saveStop} />}
     {deletingActivity && <DeleteActivityModal activity={deletingActivity} saving={saving} onCancel={() => !saving && setDeletingActivity(null)} onConfirm={() => confirmDelete(deletingActivity)} />}
   </div>;
@@ -436,7 +438,6 @@ function SectorRows({
   onDrop,
   onDragEnd,
   onSelect,
-  onDelete,
 }: {
   sector: string;
   activities: Activity[];
@@ -451,7 +452,6 @@ function SectorRows({
   onDrop: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   onSelect: (activity: Activity) => void;
-  onDelete: (activity: Activity) => void;
 }) {
   return <>
     <tr
@@ -494,11 +494,10 @@ function SectorRows({
           </div>
 
           <div
-            className="stop-print-hide flex cursor-grab items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold text-brand-700 bg-white/70 hover:bg-white border border-brand-200 active:cursor-grabbing shadow-2xs"
+            className="stop-print-hide flex cursor-grab items-center rounded-lg p-2 text-brand-700 bg-white/70 hover:bg-white border border-brand-200 active:cursor-grabbing shadow-sm"
             title="Arraste para reorganizar a ordem deste setor"
           >
             <GripVertical size={15} />
-            <span className="hidden sm:inline">Reorganizar</span>
           </div>
         </div>
       </th>
@@ -510,39 +509,21 @@ function SectorRows({
       <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 font-medium text-slate-800">{activity.descricao}</td>
       <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 font-semibold text-slate-700">{activity.responsavel || "—"}</td>
       <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 text-slate-700">{activity.equipe || "—"}</td>
-      <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 text-center whitespace-nowrap">
-        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700 border border-slate-200">
-          <Clock size={12} className="text-brand-600" />
-          {formatDuration(activity.duracaoPrevistaMinutos, activity.dataInicio, activity.horaInicio, activity.dataFim, activity.horaFim)}
-        </span>
-      </td>
+      <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 text-slate-700">{activity.observacoes || "—"}</td>
+      <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 text-center whitespace-nowrap font-bold text-slate-700">{activityDuration(activity, bounds)}</td>
       <td className="px-3 py-2 min-w-[320px]">
         <GanttBar activity={activity} bounds={bounds} onClick={() => onSelect(activity)} />
       </td>
-      <td className="stop-print-hide px-2 py-2.5 text-center">
-        <div className="flex items-center justify-center gap-1">
-          <button
-            type="button"
-            onClick={() => onSelect(activity)}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-brand-100 hover:text-brand-700"
-            title="Editar atividade"
-            aria-label="Editar atividade"
-          >
-            <Pencil size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(activity)}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-100 hover:text-rose-600"
-            title="Excluir atividade"
-            aria-label="Excluir atividade"
-          >
-            <Trash2 size={15} />
-          </button>
-        </div>
-      </td>
     </tr>)}
   </>;
+}
+
+function activityDuration(activity: Activity, bounds: TimelineBounds) {
+  const storedDuration = formatDuration(activity.duracaoPrevistaMinutos, activity.dataInicio, activity.horaInicio, activity.dataFim, activity.horaFim);
+  if (storedDuration !== "—") return storedDuration;
+  const start = new Date(`${activity.dataInicio || bounds.stop.inicio}T${activity.horaInicio || bounds.stop.horaInicio || "00:00"}:00`);
+  const end = new Date(`${activity.dataFim || bounds.stop.fim}T${activity.horaFim || bounds.stop.horaFim || "23:59"}:00`);
+  return formatDuration(Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000)));
 }
 
 function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: TimelineBounds; onClick: () => void }) {
@@ -555,21 +536,22 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
   const width = Math.max(5, Math.min(100 - left, right - left));
 
   const timeLabel = hasTimes ? `${activity.horaInicio} - ${activity.horaFim}` : `${bounds.stop.horaInicio} - ${bounds.stop.horaFim}`;
-  const duration = formatDuration(activity.duracaoPrevistaMinutos, activity.dataInicio, activity.horaInicio, activity.dataFim, activity.horaFim);
+  const duration = activityDuration(activity, bounds);
 
   return (
     <div
       onClick={onClick}
       title={`${activity.descricao} | Horário: ${timeLabel} | Duração: ${duration}`}
-      className="group/gantt relative h-7 w-full cursor-pointer rounded-lg border border-slate-200 bg-slate-100/90 p-0.5 overflow-hidden"
+      className="group/gantt flex h-10 w-full cursor-pointer items-center gap-2"
     >
-      <div className="pointer-events-none absolute inset-0 grid grid-cols-4 divide-x divide-slate-200/50" />
-      <div
-        className="absolute top-0.5 bottom-0.5 flex items-center justify-between rounded-md bg-linear-to-r from-brand-600 to-brand-500 px-2 text-white shadow-2xs transition-all group-hover/gantt:brightness-110"
-        style={{ left: `${left}%`, width: `${width}%` }}
-      >
-        <span className="truncate font-mono text-[10px] font-bold tracking-tight">{timeLabel}</span>
-        <span className="ml-1 hidden shrink-0 rounded bg-black/20 px-1 py-0.2 text-[9px] font-extrabold sm:inline">{duration}</span>
+      <div className="relative h-10 min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 p-1 shadow-sm transition group-hover/gantt:border-blue-300">
+        <div className="pointer-events-none absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${Math.max(bounds.days.length, 1)}, minmax(0, 1fr))` }}>
+          {bounds.days.map(day => <span key={day.dateStr} className="border-r border-slate-300/90 last:border-r-0" />)}
+        </div>
+        <div
+          className="absolute top-1 bottom-1 rounded-lg border border-blue-700 bg-gradient-to-r from-blue-700 to-blue-500 shadow-sm transition-all group-hover/gantt:brightness-110"
+          style={{ left: `${left}%`, width: `${width}%` }}
+        />
       </div>
     </div>
   );
@@ -623,20 +605,61 @@ function DeleteActivityModal({ activity, saving, onCancel, onConfirm }: { activi
   </div>;
 }
 
+function BatchActivityDialog({ activities, stop, saving, error, onChange, onClose, onSave }: { activities: Activity[]; stop: Stop; saving: boolean; error: string; onChange: (activities: Activity[]) => void; onClose: () => void; onSave: () => void }) {
+  const fields: Array<keyof Activity> = ["setor", "especialidade", "ordem", "descricao", "responsavel", "equipe", "observacoes", "dataInicio", "horaInicio", "duracaoPrevistaMinutos"];
+  const labels = ["Setor", "Especialidade", "Ordem", "Descrição", "Responsável", "Equipe", "Observações", "Data início", "Hora início", "Tempo (min)"];
+  const blank = (): Activity => ({ ...emptyActivity, dataInicio: stop.inicio, horaInicio: stop.horaInicio });
+  const downloadExcelTemplate = () => {
+    const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
+    const sample = ["", "", "", "", "", "", "", stop.inicio, stop.horaInicio, ""];
+    const content = `\uFEFF${[labels, sample].map(row => row.map(escape).join(";")).join("\r\n")}`;
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+    link.download = "modelo_atividades_parada.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+  const update = (row: number, key: keyof Activity, value: string) => onChange(activities.map((activity, index) => index === row ? { ...activity, [key]: key === "duracaoPrevistaMinutos" ? (Number(value) || undefined) : value } : activity));
+  const paste = (event: React.ClipboardEvent<HTMLInputElement>, row: number, startColumn: number) => {
+    const text = event.clipboardData.getData("text");
+    if (!text.includes("\t") && !text.includes("\n")) return;
+    event.preventDefault();
+    const pastedRows = text.trim().split(/\r?\n/).filter(Boolean).map(line => line.split("\t"));
+    const next = [...activities];
+    pastedRows.forEach((values, offset) => {
+      const index = row + offset;
+      const base = next[index] ?? blank();
+      const filled = { ...base } as Activity;
+      values.slice(0, fields.length - startColumn).forEach((value, column) => {
+        const key = fields[startColumn + column];
+        const rawValue = value.trim();
+        const dateMatch = key === "dataInicio" && rawValue.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        const normalizedValue = dateMatch ? `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}` : rawValue;
+        (filled as any)[key] = key === "duracaoPrevistaMinutos" ? (Number(normalizedValue) || undefined) : normalizedValue;
+      });
+      next[index] = filled;
+    });
+    onChange(next);
+  };
+  const valid = activities.length > 0 && activities.every(activity => activity.setor.trim() && activity.descricao.trim() && activity.duracaoPrevistaMinutos);
+
+  return <div className="stop-print-hide fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={event => event.target === event.currentTarget && !saving && onClose()}>
+    <div role="dialog" aria-modal="true" className="max-h-[90vh] w-full max-w-[96vw] overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4"><div className="min-w-0 flex-1"><h2 className="text-lg font-bold text-slate-900">Incluir atividades</h2><p className="text-sm text-slate-500">Uma atividade por linha. Cole dados tabulados do Excel com Ctrl+V.</p></div><button type="button" onClick={downloadExcelTemplate} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100"><Download size={16} /> Excel</button><button onClick={onClose} disabled={saving} className="grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Fechar"><X size={20} /></button></div>
+      <div className="max-h-[60vh] overflow-auto p-5"><table className="min-w-[1450px] w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold uppercase text-slate-500"><tr>{labels.map(label => <th key={label} className="px-2 py-2">{label}</th>)}<th className="px-2 py-2" /></tr></thead><tbody>{activities.map((activity, row) => <tr key={row} className="border-t border-slate-200">{fields.map((key, column) => <td key={key} className="p-1"><input type={key === "dataInicio" ? "date" : key === "horaInicio" ? "time" : key === "duracaoPrevistaMinutos" ? "number" : "text"} min={key === "duracaoPrevistaMinutos" ? "1" : undefined} value={activity[key] ?? ""} onPaste={event => paste(event, row, column)} onChange={event => update(row, key, event.target.value)} className="h-10 w-full min-w-28 rounded-lg border border-slate-300 px-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></td>)}<td className="p-1"><button type="button" disabled={activities.length === 1} onClick={() => onChange(activities.filter((_, index) => index !== row))} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30" aria-label="Remover linha"><Trash2 size={16} /></button></td></tr>)}</tbody></table></div>
+      {error && <p className="mx-5 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
+      <div className="flex items-center gap-3 border-t border-slate-200 px-5 py-4"><button type="button" onClick={() => onChange([...activities, blank()])} className="inline-flex items-center gap-2 rounded-lg border border-brand-200 px-4 py-2.5 text-sm font-bold text-brand-700 hover:bg-brand-50"><Plus size={17} /> Adicionar linha</button><div className="flex-1" /><button onClick={onClose} disabled={saving} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700">Cancelar</button><button onClick={onSave} disabled={saving || !valid} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save size={17} /> {saving ? "Salvando..." : "Salvar atividades"}</button></div>
+    </div>
+  </div>;
+}
+
 function ActivityDialog({ activity, stop, sectors, specialties, responsibles, saving, error, onChange, onClose, onSave, onDelete }: { activity: Activity; stop: Stop; sectors: string[]; specialties: string[]; responsibles: string[]; saving: boolean; error: string; onChange: (activity: Activity) => void; onClose: () => void; onSave: () => void; onDelete: (activity: Activity) => void }) {
   const field = (key: keyof Activity, value: string) => onChange({ ...activity, [key]: value });
-
-  const calculatedDuration = formatDuration(
-    activity.duracaoPrevistaMinutos,
-    activity.dataInicio || stop.inicio,
-    activity.horaInicio || stop.horaInicio,
-    activity.dataFim || stop.fim,
-    activity.horaFim || stop.horaFim
-  );
+  const executionMinutes = activity.duracaoPrevistaMinutos ?? 0;
 
   return <div className="stop-print-hide fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={event => event.target === event.currentTarget && onClose()}>
     <div role="dialog" aria-modal="true" aria-labelledby="activity-dialog-title" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-      <div className="flex items-center border-b border-slate-200 px-5 py-4"><div className="min-w-0 flex-1"><h2 id="activity-dialog-title" className="text-lg font-bold text-slate-900">{activity.id ? "Editar atividade" : "Incluir atividade"}</h2><p className="text-sm text-slate-500">Preencha os dados do cronograma e o período programado.</p></div><button onClick={onClose} disabled={saving} className="grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Fechar"><X size={20} /></button></div>
+      <div className="flex items-center border-b border-slate-200 px-5 py-4"><div className="min-w-0 flex-1"><h2 id="activity-dialog-title" className="text-lg font-bold text-slate-900">{activity.id ? "Editar atividade" : "Incluir atividade"}</h2><p className="text-sm text-slate-500">Informe o início e o tempo necessário para a execução.</p></div><button onClick={onClose} disabled={saving} className="grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Fechar"><X size={20} /></button></div>
       <div className="grid gap-4 p-5 sm:grid-cols-2">
         <CreatableSelect
           label="Setor"
@@ -674,25 +697,27 @@ function ActivityDialog({ activity, stop, sectors, specialties, responsibles, sa
         <FormField label="Equipe" value={activity.equipe} onChange={value => field("equipe", value)} />
         <FormField label="Observações" value={activity.observacoes} onChange={value => field("observacoes", value)} />
 
-        {/* Agendamento de Horário & Gantt */}
+        {/* Agendamento da atividade */}
         <div className="sm:col-span-2 border-t border-slate-200 pt-3">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Agendamento & Duração</p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Agendamento</p>
+          <div className="grid gap-3 sm:grid-cols-3">
             <StopInput label="Data de início" type="date" value={activity.dataInicio || stop.inicio} onChange={value => field("dataInicio", value)} />
             <StopInput label="Hora de início" type="time" value={activity.horaInicio || stop.horaInicio} onChange={value => field("horaInicio", value)} />
-            <StopInput label="Data de término" type="date" value={activity.dataFim || stop.fim} onChange={value => field("dataFim", value)} />
-            <StopInput label="Hora de término" type="time" value={activity.horaFim || stop.horaFim} onChange={value => field("horaFim", value)} />
-          </div>
-
-          <div className="mt-3 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50/70 p-3">
-            <div className="flex items-center gap-2 text-brand-900">
-              <Clock size={16} className="text-brand-600" />
-              <span className="text-xs font-bold uppercase tracking-wide">Duração calculada:</span>
-              <span className="text-sm font-extrabold text-brand-950">{calculatedDuration}</span>
+            <div>
+              <label className="text-sm font-bold text-slate-700">Tempo de execução <span className="text-red-500">*</span></label>
+              <div className="relative mt-1.5">
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={executionMinutes || ""}
+                  onChange={event => onChange({ ...activity, duracaoPrevistaMinutos: Number(event.target.value) || undefined })}
+                  placeholder="Ex.: 120"
+                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 pr-16 text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-bold text-slate-500">minutos</span>
+              </div>
             </div>
-            <span className="font-mono text-xs font-semibold text-brand-700">
-              {(activity.horaInicio || stop.horaInicio)} → {(activity.horaFim || stop.horaFim)}
-            </span>
           </div>
         </div>
 
@@ -711,7 +736,7 @@ function ActivityDialog({ activity, stop, sectors, specialties, responsibles, sa
         )}
         <div className="flex-1" />
         <button onClick={onClose} disabled={saving} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
-        <button onClick={onSave} disabled={saving || !activity.setor.trim() || !activity.descricao.trim()} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"><Save size={17} /> {saving ? "Salvando..." : "Salvar"}</button>
+        <button onClick={onSave} disabled={saving || !activity.setor.trim() || !activity.descricao.trim() || !activity.duracaoPrevistaMinutos} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"><Save size={17} /> {saving ? "Salvando..." : "Salvar"}</button>
       </div>
     </div>
   </div>;
