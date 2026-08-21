@@ -34,7 +34,8 @@ a:focus-visible {
 
 @media print {
   @page { size: landscape; margin: 7mm; }
-  @page stopSchedule { size: A4 portrait; margin: 6mm; }
+  @page stopSchedulePortrait { size: A4 portrait; margin: 6mm; }
+  @page stopScheduleLandscape { size: A4 landscape; margin: 6mm; }
   body { background: white !important; }
   *, *::before, *::after {
     -webkit-print-color-adjust: exact !important;
@@ -90,7 +91,10 @@ a:focus-visible {
     height: auto !important;
     max-height: none !important;
     overflow: visible !important;
-    page: stopSchedule;
+    page: stopSchedulePortrait;
+  }
+  body:has(.stop-schedule-print) .stop-schedule-print.stop-print-landscape {
+    page: stopScheduleLandscape;
   }
   body:has(.stop-schedule-print) .stop-schedule-print > header {
     display: flex !important;
@@ -118,7 +122,10 @@ a:focus-visible {
     position: static !important;
   }
   body:has(.stop-schedule-print) .stop-schedule-table th,
-  body:has(.stop-schedule-print) .stop-schedule-table td { padding: 1.5mm 2mm !important; }
+  body:has(.stop-schedule-print) .stop-schedule-table td {
+    min-width: 0 !important;
+    padding: 1.5mm 2mm !important;
+  }
   body:has(.stop-schedule-print) .stop-schedule-table tr {
     break-inside: avoid-page;
     page-break-inside: avoid;

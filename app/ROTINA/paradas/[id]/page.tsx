@@ -79,6 +79,17 @@ function formatDuration(minutes?: number | null, dataInicio?: string, horaInicio
 
 type DaySlot = { dateStr: string; label: string; weekday: string; fullDate: string; widthPercent: number };
 type TimelineBounds = { start: Date; end: Date; startMs: number; endMs: number; totalMs: number; days: DaySlot[]; stop: Stop };
+type ScheduleColumn = "especialidade" | "ordem" | "descricao" | "responsavel" | "equipe" | "observacoes" | "gantt";
+
+const defaultScheduleColumnWidths: Record<ScheduleColumn, number> = {
+  especialidade: 150,
+  ordem: 120,
+  descricao: 300,
+  responsavel: 160,
+  equipe: 140,
+  observacoes: 180,
+  gantt: 420,
+};
 
 const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -147,6 +158,8 @@ export default function StopSchedulePage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
+  const [columnWidths, setColumnWidths] = useState<Record<ScheduleColumn, number>>(defaultScheduleColumnWidths);
+  const [columnWidthsLoaded, setColumnWidthsLoaded] = useState(false);
 
   const specialtyOptions = useMemo(
     () => [...new Set([...defaultSpecialties, ...activities.map(activity => activity.especialidade).filter(Boolean)])],
@@ -165,6 +178,35 @@ export default function StopSchedulePage() {
   }, [orderedSectors, activities]);
 
   const bounds = useMemo(() => (stop ? getTimelineBounds(stop) : null), [stop]);
+  const totalColumnWidth = useMemo(() => Object.values(columnWidths).reduce((total, width) => total + width, 0), [columnWidths]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("stop-schedule-column-widths");
+      if (saved) setColumnWidths({ ...defaultScheduleColumnWidths, ...JSON.parse(saved) });
+    } catch { /* Mantém as larguras padrão. */ }
+    setColumnWidthsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (columnWidthsLoaded) window.localStorage.setItem("stop-schedule-column-widths", JSON.stringify(columnWidths));
+  }, [columnWidths, columnWidthsLoaded]);
+
+  function startColumnResize(column: ScheduleColumn, event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = columnWidths[column];
+    const onMove = (moveEvent: MouseEvent) => {
+      setColumnWidths(widths => ({ ...widths, [column]: Math.max(80, startWidth + moveEvent.clientX - startX) }));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
 
   useEffect(() => {
     Promise.all([
@@ -323,12 +365,17 @@ export default function StopSchedulePage() {
     } finally { setSaving(false); }
   }
 
-  function downloadPdf() {
+  function downloadPdf(orientation: "portrait" | "landscape") {
     if (!stop) return;
     setExportOpen(false);
+    const printArea = document.querySelector(".stop-schedule-print");
+    printArea?.classList.toggle("stop-print-landscape", orientation === "landscape");
     const previousTitle = document.title;
     document.title = `Cronograma_Parada_${stop.area}_${formatDate(stop.inicio).replaceAll("/", "-")}`.replace(/[^a-zA-Z0-9_-]+/g, "_");
-    window.addEventListener("afterprint", () => { document.title = previousTitle; }, { once: true });
+    window.addEventListener("afterprint", () => {
+      document.title = previousTitle;
+      printArea?.classList.remove("stop-print-landscape");
+    }, { once: true });
     window.print();
   }
 
@@ -404,8 +451,11 @@ export default function StopSchedulePage() {
           <Download size={18} /> Exportar cronograma <ChevronDown size={16} />
         </button>
         {exportOpen && <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
-          <button type="button" role="menuitem" onClick={downloadPdf} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700">
-            <FileText size={18} /> Exportar como PDF
+          <button type="button" role="menuitem" onClick={() => downloadPdf("portrait")} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700">
+            <FileText size={18} /> PDF vertical
+          </button>
+          <button type="button" role="menuitem" onClick={() => downloadPdf("landscape")} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700">
+            <FileText size={18} /> PDF horizontal
           </button>
           <button type="button" role="menuitem" onClick={exportExcel} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700">
             <FileSpreadsheet size={18} /> Exportar como Excel
@@ -415,16 +465,19 @@ export default function StopSchedulePage() {
     </header>
 
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
-      {activities.length ? <div className="stop-schedule-table max-h-[calc(100vh-112px)] overflow-auto"><table className="w-full min-w-[1380px] text-left text-sm">
+      {activities.length ? <div className="stop-schedule-table max-h-[calc(100vh-112px)] overflow-auto"><table className="w-full min-w-[1380px] table-fixed text-left text-sm">
+        <colgroup>
+          {(Object.keys(columnWidths) as ScheduleColumn[]).map(column => <col key={column} style={{ width: `${(columnWidths[column] / totalColumnWidth) * 100}%` }} />)}
+        </colgroup>
         <thead className="sticky top-0 z-20 bg-slate-100 text-xs font-bold uppercase tracking-wide text-slate-600 shadow-sm">
           <tr>
-            <th className="w-[10%] px-3 py-3">Especialidade</th>
-            <th className="w-[8%] px-3 py-3">Ordem</th>
-            <th className="w-[20%] px-3 py-3">Descrição da atividade</th>
-            <th className="w-[10%] px-3 py-3">Responsável</th>
-            <th className="w-[9%] px-3 py-3">Equipe</th>
-            <th className="w-[12%] px-3 py-3">Observações</th>
-            <th className="w-[31%] min-w-[320px] px-3 py-2">
+            <th className="relative px-3 py-3">Especialidade<ColumnResizeHandle onMouseDown={event => startColumnResize("especialidade", event)} /></th>
+            <th className="relative px-3 py-3">Ordem<ColumnResizeHandle onMouseDown={event => startColumnResize("ordem", event)} /></th>
+            <th className="relative px-3 py-3">Descrição da atividade<ColumnResizeHandle onMouseDown={event => startColumnResize("descricao", event)} /></th>
+            <th className="relative px-3 py-3">Responsável<ColumnResizeHandle onMouseDown={event => startColumnResize("responsavel", event)} /></th>
+            <th className="relative px-3 py-3">Equipe<ColumnResizeHandle onMouseDown={event => startColumnResize("equipe", event)} /></th>
+            <th className="relative px-3 py-3">Observações<ColumnResizeHandle onMouseDown={event => startColumnResize("observacoes", event)} /></th>
+            <th className="relative min-w-[320px] px-3 py-2">
               <div className="flex w-full overflow-hidden rounded-md border border-slate-300 bg-slate-100 shadow-2xs divide-x divide-slate-300">
                 {bounds.days.map((day) => (
                   <div
@@ -441,6 +494,7 @@ export default function StopSchedulePage() {
                   </div>
                 ))}
               </div>
+              <ColumnResizeHandle onMouseDown={event => startColumnResize("gantt", event)} />
             </th>
           </tr>
         </thead>
@@ -490,6 +544,16 @@ export default function StopSchedulePage() {
     {editingStop && <StopDialog stop={editingStop} saving={saving} error={formError} onChange={setEditingStop} onClose={() => !saving && setEditingStop(null)} onSave={saveStop} />}
     {deletingActivity && <DeleteActivityModal activity={deletingActivity} saving={saving} onCancel={() => !saving && setDeletingActivity(null)} onConfirm={() => confirmDelete(deletingActivity)} />}
   </div>;
+}
+
+function ColumnResizeHandle({ onMouseDown }: { onMouseDown: (event: React.MouseEvent) => void }) {
+  return <span
+    role="separator"
+    aria-orientation="vertical"
+    title="Arraste para ajustar a largura da coluna"
+    onMouseDown={onMouseDown}
+    className="stop-print-hide absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize border-r-2 border-transparent transition hover:border-brand-500"
+  />;
 }
 
 function SectorRows({
