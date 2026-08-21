@@ -57,10 +57,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (eventError) throw eventError;
     const { error: detailError } = await supabase.from("parada_detalhes").update({ tipo_manutencao: tipo }).eq("evento_id", id);
     if (detailError) throw detailError;
-    const { error: activityError } = await supabase.from("parada_atividades").update({
-      area_id: targetArea.id, data_inicio: inicio, data_fim: fim,
-      hora_inicio: horaInicio || null, hora_fim: horaFim || null,
-    }).eq("evento_id", id);
+    const { error: activityError } = await supabase.from("parada_atividades")
+      .update({ area_id: targetArea.id })
+      .eq("evento_id", id);
     if (activityError) throw activityError;
 
     return NextResponse.json({ stop: { id, area, tipo, inicio, fim, horaInicio, horaFim } });
