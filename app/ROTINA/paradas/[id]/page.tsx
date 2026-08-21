@@ -623,12 +623,11 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
           const activityDayIndex = dayIndex - firstScheduledDayIndex;
           const remainingMinutes = isOnOrAfterActivityStart ? totalDurationMinutes - activityDayIndex * 8 * 60 : 0;
           const allocatedMinutes = Math.max(0, Math.min(8 * 60, remainingMinutes));
-          const fillPercent = (allocatedMinutes / (8 * 60)) * 100;
           return <span key={day.dateStr} className="relative overflow-hidden border-r border-slate-300/90 bg-slate-100 last:border-r-0">
-            {fillPercent > 0 && <span
+            {allocatedMinutes > 0 && <span
               className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-700 to-blue-500 transition-all group-hover/gantt:brightness-110"
-              style={{ width: `${fillPercent}%` }}
-              title={`${formatDuration(allocatedMinutes)} de 8h disponíveis em ${day.fullDate}`}
+              style={{ width: "100%" }}
+              title={`${formatDuration(allocatedMinutes)} programadas em ${day.fullDate}`}
             />}
           </span>;
         })}
