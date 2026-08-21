@@ -7,8 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { DataLoading } from "@/components/data-loading";
 
 type Stop = { id: string; area: string; tipo: string; inicio: string; fim: string; horaInicio: string; horaFim: string };
-type Activity = { id?: string; setor: string; especialidade: string; ordem: string; descricao: string; responsavel: string; equipe: string; observacoes: string; dataInicio?: string; horaInicio?: string; dataFim?: string; horaFim?: string; duracaoPrevistaMinutos?: number; status?: string; quantidadeReprogramacoes?: number };
-const emptyActivity: Activity = { setor: "", especialidade: "", ordem: "", descricao: "", responsavel: "", equipe: "", observacoes: "", dataInicio: "", horaInicio: "", duracaoPrevistaMinutos: undefined };
+type Activity = { id?: string; setor: string; especialidade: string; ordem: string; descricao: string; responsavel: string; equipe: string; observacoes: string; dataInicio?: string; horaInicio?: string; dataFim?: string; horaFim?: string; duracaoPrevistaMinutos?: number; permiteSabado?: boolean; permiteDomingo?: boolean; status?: string; quantidadeReprogramacoes?: number };
+const emptyActivity: Activity = { setor: "", especialidade: "", ordem: "", descricao: "", responsavel: "", equipe: "", observacoes: "", dataInicio: "", horaInicio: "", duracaoPrevistaMinutos: undefined, permiteSabado: false, permiteDomingo: false };
 
 const defaultSpecialties = [
   "Mecânica",
@@ -349,6 +349,8 @@ export default function StopSchedulePage() {
       { label: "Data de fim", value: activity => formatDate(activity.dataFim || activity.dataInicio || stop.fim) },
       { label: "Hora de fim", value: activity => activity.horaFim || stop.horaFim || "" },
       { label: "Duração prevista (minutos)", value: activity => activity.duracaoPrevistaMinutos || "" },
+      { label: "Utiliza sábado", value: activity => activity.permiteSabado ? "Sim" : "Não" },
+      { label: "Utiliza domingo", value: activity => activity.permiteDomingo ? "Sim" : "Não" },
       { label: "Status", value: activity => activity.status || "" },
       { label: "Reprogramações", value: activity => activity.quantidadeReprogramacoes || 0 },
     ];
@@ -603,7 +605,13 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
   const hasTimes = Boolean(activity.dataInicio && activity.horaInicio && activity.dataFim && activity.horaFim);
   const activityStartDate = activity.dataInicio || bounds.stop.inicio;
   const totalDurationMinutes = activityDurationMinutes(activity, bounds);
-  const firstScheduledDayIndex = bounds.days.findIndex(day => day.dateStr >= activityStartDate);
+  const scheduledDays = bounds.days.filter(day => {
+    if (day.dateStr < activityStartDate) return false;
+    const weekDay = new Date(`${day.dateStr}T12:00:00`).getDay();
+    if (weekDay === 6) return activity.permiteSabado === true;
+    if (weekDay === 0) return activity.permiteDomingo === true;
+    return true;
+  });
 
   const timeLabel = hasTimes ? `${activity.horaInicio} - ${activity.horaFim}` : `${bounds.stop.horaInicio} - ${bounds.stop.horaFim}`;
   const duration = activityDuration(activity, bounds);
@@ -618,10 +626,9 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
         className="grid h-10 min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm transition group-hover/gantt:border-blue-300"
         style={{ gridTemplateColumns: `repeat(${Math.max(bounds.days.length, 1)}, minmax(0, 1fr))` }}
       >
-        {bounds.days.map((day, dayIndex) => {
-          const isOnOrAfterActivityStart = firstScheduledDayIndex >= 0 && dayIndex >= firstScheduledDayIndex;
-          const activityDayIndex = dayIndex - firstScheduledDayIndex;
-          const remainingMinutes = isOnOrAfterActivityStart ? totalDurationMinutes - activityDayIndex * 8 * 60 : 0;
+        {bounds.days.map(day => {
+          const activityDayIndex = scheduledDays.findIndex(scheduledDay => scheduledDay.dateStr === day.dateStr);
+          const remainingMinutes = activityDayIndex >= 0 ? totalDurationMinutes - activityDayIndex * 8 * 60 : 0;
           const allocatedMinutes = Math.max(0, Math.min(8 * 60, remainingMinutes));
           return <span key={day.dateStr} className="relative overflow-hidden border-r border-slate-300/90 bg-slate-100 last:border-r-0">
             {allocatedMinutes > 0 && <span
@@ -685,12 +692,12 @@ function DeleteActivityModal({ activity, saving, onCancel, onConfirm }: { activi
 }
 
 function BatchActivityDialog({ activities, stop, saving, error, onChange, onClose, onSave }: { activities: Activity[]; stop: Stop; saving: boolean; error: string; onChange: (activities: Activity[]) => void; onClose: () => void; onSave: () => void }) {
-  const fields: Array<keyof Activity> = ["setor", "especialidade", "ordem", "descricao", "responsavel", "equipe", "observacoes", "dataInicio", "horaInicio", "duracaoPrevistaMinutos"];
-  const labels = ["Setor", "Especialidade", "Ordem", "Descrição", "Responsável", "Equipe", "Observações", "Data início", "Hora início", "Tempo (min)"];
+  const fields: Array<keyof Activity> = ["setor", "especialidade", "ordem", "descricao", "responsavel", "equipe", "observacoes", "dataInicio", "horaInicio", "duracaoPrevistaMinutos", "permiteSabado", "permiteDomingo"];
+  const labels = ["Setor", "Especialidade", "Ordem", "Descrição", "Responsável", "Equipe", "Observações", "Data início", "Hora início", "Tempo (min)", "Sábado", "Domingo"];
   const blank = (): Activity => ({ ...emptyActivity, dataInicio: stop.inicio, horaInicio: stop.horaInicio });
   const downloadExcelTemplate = () => {
     const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
-    const sample = ["", "", "", "", "", "", "", stop.inicio, stop.horaInicio, ""];
+    const sample = ["", "", "", "", "", "", "", stop.inicio, stop.horaInicio, "", "Não", "Não"];
     const content = `\uFEFF${[labels, sample].map(row => row.map(escape).join(";")).join("\r\n")}`;
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
@@ -698,7 +705,7 @@ function BatchActivityDialog({ activities, stop, saving, error, onChange, onClos
     link.click();
     URL.revokeObjectURL(link.href);
   };
-  const update = (row: number, key: keyof Activity, value: string) => onChange(activities.map((activity, index) => index === row ? { ...activity, [key]: key === "duracaoPrevistaMinutos" ? (Number(value) || undefined) : value } : activity));
+  const update = (row: number, key: keyof Activity, value: string | boolean) => onChange(activities.map((activity, index) => index === row ? { ...activity, [key]: key === "duracaoPrevistaMinutos" ? (Number(value) || undefined) : value } : activity));
   const paste = (event: React.ClipboardEvent<HTMLInputElement>, row: number, startColumn: number) => {
     const text = event.clipboardData.getData("text");
     if (!text.includes("\t") && !text.includes("\n")) return;
@@ -714,7 +721,11 @@ function BatchActivityDialog({ activities, stop, saving, error, onChange, onClos
         const rawValue = value.trim();
         const dateMatch = key === "dataInicio" && rawValue.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
         const normalizedValue = dateMatch ? `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}` : rawValue;
-        (filled as any)[key] = key === "duracaoPrevistaMinutos" ? (Number(normalizedValue) || undefined) : normalizedValue;
+        (filled as any)[key] = key === "duracaoPrevistaMinutos"
+          ? (Number(normalizedValue) || undefined)
+          : key === "permiteSabado" || key === "permiteDomingo"
+            ? ["sim", "s", "true", "1", "x"].includes(normalizedValue.toLocaleLowerCase("pt-BR"))
+            : normalizedValue;
       });
       next[index] = filled;
     });
@@ -725,7 +736,7 @@ function BatchActivityDialog({ activities, stop, saving, error, onChange, onClos
   return <div className="stop-print-hide fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={event => event.target === event.currentTarget && !saving && onClose()}>
     <div role="dialog" aria-modal="true" className="max-h-[90vh] w-full max-w-[96vw] overflow-hidden rounded-2xl bg-white shadow-2xl">
       <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4"><div className="min-w-0 flex-1"><h2 className="text-lg font-bold text-slate-900">Incluir atividades</h2><p className="text-sm text-slate-500">Uma atividade por linha. Cole dados tabulados do Excel com Ctrl+V.</p></div><button type="button" onClick={downloadExcelTemplate} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100"><Download size={16} /> Excel</button><button onClick={onClose} disabled={saving} className="grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Fechar"><X size={20} /></button></div>
-      <div className="max-h-[60vh] overflow-auto p-5"><table className="min-w-[1450px] w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold uppercase text-slate-500"><tr>{labels.map(label => <th key={label} className="px-2 py-2">{label}</th>)}<th className="px-2 py-2" /></tr></thead><tbody>{activities.map((activity, row) => <tr key={row} className="border-t border-slate-200">{fields.map((key, column) => <td key={key} className="p-1"><input type={key === "dataInicio" ? "date" : key === "horaInicio" ? "time" : key === "duracaoPrevistaMinutos" ? "number" : "text"} min={key === "duracaoPrevistaMinutos" ? "1" : undefined} value={activity[key] ?? ""} onPaste={event => paste(event, row, column)} onChange={event => update(row, key, event.target.value)} className="h-10 w-full min-w-28 rounded-lg border border-slate-300 px-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></td>)}<td className="p-1"><button type="button" disabled={activities.length === 1} onClick={() => onChange(activities.filter((_, index) => index !== row))} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30" aria-label="Remover linha"><Trash2 size={16} /></button></td></tr>)}</tbody></table></div>
+      <div className="max-h-[60vh] overflow-auto p-5"><table className="min-w-[1650px] w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold uppercase text-slate-500"><tr>{labels.map(label => <th key={label} className="px-2 py-2">{label}</th>)}<th className="px-2 py-2" /></tr></thead><tbody>{activities.map((activity, row) => <tr key={row} className="border-t border-slate-200">{fields.map((key, column) => <td key={key} className="p-1">{key === "permiteSabado" || key === "permiteDomingo" ? <label className="grid h-10 min-w-20 place-items-center"><input type="checkbox" checked={activity[key] === true} onChange={event => update(row, key, event.target.checked)} className="h-5 w-5 accent-brand-600" /></label> : <input type={key === "dataInicio" ? "date" : key === "horaInicio" ? "time" : key === "duracaoPrevistaMinutos" ? "number" : "text"} min={key === "duracaoPrevistaMinutos" ? "1" : undefined} value={String(activity[key] ?? "")} onPaste={event => paste(event, row, column)} onChange={event => update(row, key, event.target.value)} className="h-10 w-full min-w-28 rounded-lg border border-slate-300 px-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />}</td>)}<td className="p-1"><button type="button" disabled={activities.length === 1} onClick={() => onChange(activities.filter((_, index) => index !== row))} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30" aria-label="Remover linha"><Trash2 size={16} /></button></td></tr>)}</tbody></table></div>
       {error && <p className="mx-5 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
       <div className="flex items-center gap-3 border-t border-slate-200 px-5 py-4"><button type="button" onClick={() => onChange([...activities, blank()])} className="inline-flex items-center gap-2 rounded-lg border border-brand-200 px-4 py-2.5 text-sm font-bold text-brand-700 hover:bg-brand-50"><Plus size={17} /> Adicionar linha</button><div className="flex-1" /><button onClick={onClose} disabled={saving} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700">Cancelar</button><button onClick={onSave} disabled={saving || !valid} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save size={17} /> {saving ? "Salvando..." : "Salvar atividades"}</button></div>
     </div>
@@ -797,6 +808,16 @@ function ActivityDialog({ activity, stop, sectors, specialties, responsibles, sa
                 <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-bold text-slate-500">minutos</span>
               </div>
             </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+              <input type="checkbox" checked={activity.permiteSabado === true} onChange={event => onChange({ ...activity, permiteSabado: event.target.checked })} className="h-4 w-4 accent-brand-600" />
+              Utilizar sábado
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+              <input type="checkbox" checked={activity.permiteDomingo === true} onChange={event => onChange({ ...activity, permiteDomingo: event.target.checked })} className="h-4 w-4 accent-brand-600" />
+              Utilizar domingo
+            </label>
           </div>
         </div>
 
