@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Download, Factory, GripVertical, Plus, Save, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Download, Factory, FileSpreadsheet, FileText, GripVertical, Plus, Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DataLoading } from "@/components/data-loading";
 
@@ -146,6 +146,7 @@ export default function StopSchedulePage() {
   const [editingStop, setEditingStop] = useState<Stop | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [exportOpen, setExportOpen] = useState(false);
 
   const specialtyOptions = useMemo(
     () => [...new Set([...defaultSpecialties, ...activities.map(activity => activity.especialidade).filter(Boolean)])],
@@ -324,10 +325,61 @@ export default function StopSchedulePage() {
 
   function downloadPdf() {
     if (!stop) return;
+    setExportOpen(false);
     const previousTitle = document.title;
     document.title = `Cronograma_Parada_${stop.area}_${formatDate(stop.inicio).replaceAll("/", "-")}`.replace(/[^a-zA-Z0-9_-]+/g, "_");
     window.addEventListener("afterprint", () => { document.title = previousTitle; }, { once: true });
     window.print();
+  }
+
+  function exportExcel() {
+    if (!stop) return;
+    setExportOpen(false);
+
+    const columns: Array<{ label: string; value: (activity: Activity) => string | number }> = [
+      { label: "Setor", value: activity => activity.setor },
+      { label: "Especialidade", value: activity => activity.especialidade },
+      { label: "Ordem", value: activity => activity.ordem },
+      { label: "Descrição da atividade", value: activity => activity.descricao },
+      { label: "Responsável", value: activity => activity.responsavel },
+      { label: "Equipe", value: activity => activity.equipe },
+      { label: "Observações", value: activity => activity.observacoes },
+      { label: "Data de início", value: activity => formatDate(activity.dataInicio || stop.inicio) },
+      { label: "Hora de início", value: activity => activity.horaInicio || stop.horaInicio || "" },
+      { label: "Data de fim", value: activity => formatDate(activity.dataFim || activity.dataInicio || stop.fim) },
+      { label: "Hora de fim", value: activity => activity.horaFim || stop.horaFim || "" },
+      { label: "Duração prevista (minutos)", value: activity => activity.duracaoPrevistaMinutos || "" },
+      { label: "Status", value: activity => activity.status || "" },
+      { label: "Reprogramações", value: activity => activity.quantidadeReprogramacoes || 0 },
+    ];
+    const escapeXml = (value: string | number) => String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
+    const cell = (value: string | number, style = "") => {
+      const isNumber = typeof value === "number";
+      return `<Cell${style ? ` ss:StyleID="${style}"` : ""}><Data ss:Type="${isNumber ? "Number" : "String"}">${escapeXml(value)}</Data></Cell>`;
+    };
+    const rows = [
+      `<Row>${columns.map(column => cell(column.label, "Header")).join("")}</Row>`,
+      ...activities.map(activity => `<Row>${columns.map(column => cell(column.value(activity))).join("")}</Row>`),
+    ].join("");
+    const workbook = `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>
+      <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+        <Styles><Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#DCE6F1" ss:Pattern="Solid"/></Style></Styles>
+        <Worksheet ss:Name="Atividades"><Table>${rows}</Table></Worksheet>
+      </Workbook>`;
+    const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Cronograma_Parada_${stop.area}_${formatDate(stop.inicio).replaceAll("/", "-")}.xls`.replace(/[^a-zA-Z0-9_.-]+/g, "_");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   return <div className="stop-schedule-print">
@@ -339,7 +391,25 @@ export default function StopSchedulePage() {
         <p className="mt-0.5 text-sm font-medium text-slate-500">({formatStopPeriod(stop)})</p>
       </div>
       <button onClick={() => openActivity()} className="stop-print-hide inline-flex items-center gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm font-bold text-brand-700 shadow-sm hover:bg-brand-50"><Plus size={18} /> Incluir atividade</button>
-      <button onClick={downloadPdf} className="stop-print-hide inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-brand-700"><Download size={18} /> PDF</button>
+      <div className="stop-print-hide relative">
+        <button
+          type="button"
+          onClick={() => setExportOpen(open => !open)}
+          aria-haspopup="menu"
+          aria-expanded={exportOpen}
+          className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
+        >
+          <Download size={18} /> Exportar cronograma <ChevronDown size={16} />
+        </button>
+        {exportOpen && <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
+          <button type="button" role="menuitem" onClick={downloadPdf} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700">
+            <FileText size={18} /> Exportar como PDF
+          </button>
+          <button type="button" role="menuitem" onClick={exportExcel} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700">
+            <FileSpreadsheet size={18} /> Exportar como Excel
+          </button>
+        </div>}
+      </div>
     </header>
 
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">

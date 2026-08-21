@@ -84,9 +84,12 @@ a:focus-visible {
   body:has(.stop-schedule-print) .stop-schedule-print,
   body:has(.stop-schedule-print) .stop-schedule-print * { visibility: visible !important; }
   body:has(.stop-schedule-print) .stop-schedule-print {
-    position: absolute !important;
-    inset: 0 !important;
+    position: static !important;
+    inset: auto !important;
     width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
     page: stopSchedule;
   }
   body:has(.stop-schedule-print) .stop-schedule-print > header {
@@ -98,14 +101,26 @@ a:focus-visible {
   body:has(.stop-schedule-print) .stop-schedule-print section {
     box-shadow: none !important;
     border-color: #94a3b8 !important;
+    overflow: visible !important;
   }
-  body:has(.stop-schedule-print) .stop-schedule-table { overflow: visible !important; }
+  body:has(.stop-schedule-print) .stop-schedule-table {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
   body:has(.stop-schedule-print) .stop-schedule-table table {
     min-width: 0 !important;
     width: 100% !important;
     font-size: 6.5pt !important;
   }
+  body:has(.stop-schedule-print) .stop-schedule-table thead {
+    display: table-header-group !important;
+    position: static !important;
+  }
   body:has(.stop-schedule-print) .stop-schedule-table th,
   body:has(.stop-schedule-print) .stop-schedule-table td { padding: 1.5mm 2mm !important; }
-  body:has(.stop-schedule-print) .stop-schedule-table tr { break-inside: avoid; }
+  body:has(.stop-schedule-print) .stop-schedule-table tr {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
 }
