@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Clock, Download, Factory, GripVertical, Plus, Save, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Download, Factory, GripVertical, Plus, Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DataLoading } from "@/components/data-loading";
 
@@ -334,7 +334,10 @@ export default function StopSchedulePage() {
     <header className="sticky top-0 z-30 mb-5 flex flex-wrap items-center gap-3 bg-slate-50/95 py-3 backdrop-blur">
       <Link href="/ROTINA/paradas" className="stop-print-hide grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Voltar"><ArrowLeft size={20} /></Link>
       <span className="grid h-12 w-12 place-items-center rounded-xl bg-rose-50 text-rose-600"><Factory size={24} /></span>
-      <div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-wider text-rose-600">Cronograma da parada</p><h1 className="text-2xl font-bold tracking-tight text-slate-950">{stop.tipo} ({formatStopPeriod(stop)})</h1></div>
+      <div className="min-w-0 flex-1">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-950">Cronograma {stop.tipo}</h1>
+        <p className="mt-0.5 text-sm font-medium text-slate-500">({formatStopPeriod(stop)})</p>
+      </div>
       <button onClick={() => openActivity()} className="stop-print-hide inline-flex items-center gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm font-bold text-brand-700 shadow-sm hover:bg-brand-50"><Plus size={18} /> Incluir atividade</button>
       <button onClick={downloadPdf} className="stop-print-hide inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-brand-700"><Download size={18} /> PDF</button>
     </header>
@@ -351,12 +354,6 @@ export default function StopSchedulePage() {
             <th className="w-[12%] px-3 py-3">Observações</th>
             <th className="w-[7%] px-3 py-3 text-center">Tempo</th>
             <th className="w-[21%] min-w-[320px] px-3 py-2">
-              <div className="flex items-center justify-between pb-1 text-[11px] font-bold text-slate-700">
-                <span className="flex items-center gap-1"><Clock size={13} className="text-brand-600" /> Cronograma Gantt</span>
-                <span className="font-mono text-[10px] font-bold text-brand-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">
-                  {formatDate(stop.inicio)} {stop.inicio !== stop.fim ? `→ ${formatDate(stop.fim)}` : ""}
-                </span>
-              </div>
               <div className="flex w-full overflow-hidden rounded-md border border-slate-300 bg-slate-100 shadow-2xs divide-x divide-slate-300">
                 {bounds.days.map((day) => (
                   <div
@@ -528,12 +525,8 @@ function activityDuration(activity: Activity, bounds: TimelineBounds) {
 
 function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: TimelineBounds; onClick: () => void }) {
   const hasTimes = Boolean(activity.dataInicio && activity.horaInicio && activity.dataFim && activity.horaFim);
-  const actStart = new Date(`${activity.dataInicio || bounds.stop.inicio}T${activity.horaInicio || bounds.stop.horaInicio || "00:00"}:00`);
-  const actEnd = new Date(`${activity.dataFim || bounds.stop.fim}T${activity.horaFim || bounds.stop.horaFim || "23:59"}:00`);
-
-  const left = Math.max(0, Math.min(95, ((actStart.getTime() - bounds.startMs) / bounds.totalMs) * 100));
-  const right = Math.max(5, Math.min(100, ((actEnd.getTime() - bounds.startMs) / bounds.totalMs) * 100));
-  const width = Math.max(5, Math.min(100 - left, right - left));
+  const activityStartDate = activity.dataInicio || bounds.stop.inicio;
+  const activityEndDate = activity.dataFim || activity.dataInicio || bounds.stop.fim;
 
   const timeLabel = hasTimes ? `${activity.horaInicio} - ${activity.horaFim}` : `${bounds.stop.horaInicio} - ${bounds.stop.horaFim}`;
   const duration = activityDuration(activity, bounds);
@@ -544,14 +537,17 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
       title={`${activity.descricao} | Horário: ${timeLabel} | Duração: ${duration}`}
       className="group/gantt flex h-10 w-full cursor-pointer items-center gap-2"
     >
-      <div className="relative h-10 min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 p-1 shadow-sm transition group-hover/gantt:border-blue-300">
-        <div className="pointer-events-none absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${Math.max(bounds.days.length, 1)}, minmax(0, 1fr))` }}>
-          {bounds.days.map(day => <span key={day.dateStr} className="border-r border-slate-300/90 last:border-r-0" />)}
-        </div>
-        <div
-          className="absolute top-1 bottom-1 rounded-lg border border-blue-700 bg-gradient-to-r from-blue-700 to-blue-500 shadow-sm transition-all group-hover/gantt:brightness-110"
-          style={{ left: `${left}%`, width: `${width}%` }}
-        />
+      <div
+        className="grid h-10 min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm transition group-hover/gantt:border-blue-300"
+        style={{ gridTemplateColumns: `repeat(${Math.max(bounds.days.length, 1)}, minmax(0, 1fr))` }}
+      >
+        {bounds.days.map(day => {
+          const isScheduledDay = day.dateStr >= activityStartDate && day.dateStr <= activityEndDate;
+          return <span
+            key={day.dateStr}
+            className={`border-r border-slate-300/90 last:border-r-0 transition-all ${isScheduledDay ? "bg-gradient-to-r from-blue-700 to-blue-500 group-hover/gantt:brightness-110" : "bg-slate-100"}`}
+          />;
+        })}
       </div>
     </div>
   );
