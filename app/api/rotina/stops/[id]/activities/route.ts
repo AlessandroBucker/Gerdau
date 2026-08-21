@@ -7,6 +7,7 @@ type ActivityInput = {
   setor?: string; especialidade?: string; ordem?: string; descricao?: string;
   responsavel?: string; equipe?: string; observacoes?: string;
   dataInicio?: string; horaInicio?: string; duracaoPrevistaMinutos?: number;
+  permiteSabado?: boolean; permiteDomingo?: boolean;
 };
 
 function clean(value: unknown) {
@@ -43,6 +44,8 @@ async function activityValues(eventoId: string, body: ActivityInput) {
     equipe: clean(body.equipe) || null, observacao: clean(body.observacoes) || null,
     data_inicio: dataInicio, hora_inicio: horaInicio, data_fim: dataFim, hora_fim: horaFim,
     duracao_prevista_minutos: duracaoPrevistaMinutos,
+    permite_sabado: body.permiteSabado === true,
+    permite_domingo: body.permiteDomingo === true,
   };
 }
 
@@ -54,7 +57,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     if (eventError) throw eventError;
     const [{ data, error }, { data: sectorRows, error: sectorsError }] = await Promise.all([
       supabase.from("parada_atividades")
-      .select("id, sequencia, especialidade, ordem, atividade, responsavel_apr, equipe, observacao, data_inicio, hora_inicio, data_fim, hora_fim, duracao_prevista_minutos, status, reprogramada, quantidade_reprogramacoes, setores(nome, ordem_exibicao)")
+      .select("id, sequencia, especialidade, ordem, atividade, responsavel_apr, equipe, observacao, data_inicio, hora_inicio, data_fim, hora_fim, duracao_prevista_minutos, permite_sabado, permite_domingo, status, reprogramada, quantidade_reprogramacoes, setores(nome, ordem_exibicao)")
       .eq("evento_id", id).order("sequencia"),
       supabase.from("setores").select("nome").eq("area_id", event.area_id).eq("ativo", true).order("ordem_exibicao").order("nome"),
     ]);
@@ -68,6 +71,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
       dataInicio: row.data_inicio, horaInicio: row.hora_inicio?.slice(0, 5) ?? "",
       dataFim: row.data_fim, horaFim: row.hora_fim?.slice(0, 5) ?? "",
       duracaoPrevistaMinutos: row.duracao_prevista_minutos,
+      permiteSabado: row.permite_sabado ?? false, permiteDomingo: row.permite_domingo ?? false,
       status: row.status, reprogramada: row.reprogramada, quantidadeReprogramacoes: row.quantidade_reprogramacoes,
     }));
     return NextResponse.json({ activities, sectors: (sectorRows ?? []).map(row => row.nome) }, { headers: { "Cache-Control": "no-store" } });
