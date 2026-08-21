@@ -602,10 +602,8 @@ function activityDurationMinutes(activity: Activity, bounds: TimelineBounds) {
 function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: TimelineBounds; onClick: () => void }) {
   const hasTimes = Boolean(activity.dataInicio && activity.horaInicio && activity.dataFim && activity.horaFim);
   const activityStartDate = activity.dataInicio || bounds.stop.inicio;
-  const activityEndDate = activity.dataFim || activity.dataInicio || bounds.stop.fim;
   const totalDurationMinutes = activityDurationMinutes(activity, bounds);
   const firstScheduledDayIndex = bounds.days.findIndex(day => day.dateStr >= activityStartDate);
-  const lastScheduledDayIndex = bounds.days.findLastIndex(day => day.dateStr <= activityEndDate);
 
   const timeLabel = hasTimes ? `${activity.horaInicio} - ${activity.horaFim}` : `${bounds.stop.horaInicio} - ${bounds.stop.horaFim}`;
   const duration = activityDuration(activity, bounds);
@@ -621,9 +619,9 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
         style={{ gridTemplateColumns: `repeat(${Math.max(bounds.days.length, 1)}, minmax(0, 1fr))` }}
       >
         {bounds.days.map((day, dayIndex) => {
-          const isInsideActivityDates = firstScheduledDayIndex >= 0 && dayIndex >= firstScheduledDayIndex && dayIndex <= lastScheduledDayIndex;
+          const isOnOrAfterActivityStart = firstScheduledDayIndex >= 0 && dayIndex >= firstScheduledDayIndex;
           const activityDayIndex = dayIndex - firstScheduledDayIndex;
-          const remainingMinutes = isInsideActivityDates ? totalDurationMinutes - activityDayIndex * 8 * 60 : 0;
+          const remainingMinutes = isOnOrAfterActivityStart ? totalDurationMinutes - activityDayIndex * 8 * 60 : 0;
           const allocatedMinutes = Math.max(0, Math.min(8 * 60, remainingMinutes));
           const fillPercent = (allocatedMinutes / (8 * 60)) * 100;
           return <span key={day.dateStr} className="relative overflow-hidden border-r border-slate-300/90 bg-slate-100 last:border-r-0">
