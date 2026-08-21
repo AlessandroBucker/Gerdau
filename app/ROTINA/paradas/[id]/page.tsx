@@ -424,8 +424,7 @@ export default function StopSchedulePage() {
             <th className="w-[10%] px-3 py-3">Responsável</th>
             <th className="w-[9%] px-3 py-3">Equipe</th>
             <th className="w-[12%] px-3 py-3">Observações</th>
-            <th className="w-[7%] px-3 py-3 text-center">Tempo</th>
-            <th className="w-[21%] min-w-[320px] px-3 py-2">
+            <th className="w-[31%] min-w-[320px] px-3 py-2">
               <div className="flex w-full overflow-hidden rounded-md border border-slate-300 bg-slate-100 shadow-2xs divide-x divide-slate-300">
                 {bounds.days.map((day) => (
                   <div
@@ -538,7 +537,7 @@ function SectorRows({
           : "bg-brand-50 hover:bg-brand-100/70"
       }`}
     >
-      <th colSpan={8} className="px-4 py-2.5">
+      <th colSpan={7} className="px-4 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <div
             onClick={onToggleCollapse}
@@ -579,7 +578,6 @@ function SectorRows({
       <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 font-semibold text-slate-700">{activity.responsavel || "—"}</td>
       <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 text-slate-700">{activity.equipe || "—"}</td>
       <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 text-slate-700">{activity.observacoes || "—"}</td>
-      <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 text-center whitespace-nowrap font-bold text-slate-700">{activityDuration(activity, bounds)}</td>
       <td className="px-3 py-2 min-w-[320px]">
         <GanttBar activity={activity} bounds={bounds} onClick={() => onSelect(activity)} />
       </td>
@@ -632,10 +630,12 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
           const allocatedMinutes = Math.max(0, Math.min(8 * 60, remainingMinutes));
           return <span key={day.dateStr} className="relative overflow-hidden border-r border-slate-300/90 bg-slate-100 last:border-r-0">
             {allocatedMinutes > 0 && <span
-              className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-700 to-blue-500 transition-all group-hover/gantt:brightness-110"
+              className="absolute inset-y-0 left-0 flex items-center justify-center bg-gradient-to-r from-blue-700 to-blue-500 px-1 text-center text-[10px] font-extrabold leading-none text-white transition-all group-hover/gantt:brightness-110"
               style={{ width: "100%" }}
               title={`${formatDuration(allocatedMinutes)} programadas em ${day.fullDate}`}
-            />}
+            >
+              {activityDayIndex === 0 ? `${Math.round(totalDurationMinutes)} min` : ""}
+            </span>}
           </span>;
         })}
       </div>
