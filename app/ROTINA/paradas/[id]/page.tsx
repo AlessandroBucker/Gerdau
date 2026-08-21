@@ -586,17 +586,26 @@ function SectorRows({
 }
 
 function activityDuration(activity: Activity, bounds: TimelineBounds) {
-  const storedDuration = formatDuration(activity.duracaoPrevistaMinutos, activity.dataInicio, activity.horaInicio, activity.dataFim, activity.horaFim);
-  if (storedDuration !== "—") return storedDuration;
+  return formatDuration(activityDurationMinutes(activity, bounds));
+}
+
+function activityDurationMinutes(activity: Activity, bounds: TimelineBounds) {
+  const storedMinutes = Number(activity.duracaoPrevistaMinutos);
+  if (Number.isFinite(storedMinutes) && storedMinutes > 0) {
+    return storedMinutes;
+  }
   const start = new Date(`${activity.dataInicio || bounds.stop.inicio}T${activity.horaInicio || bounds.stop.horaInicio || "00:00"}:00`);
   const end = new Date(`${activity.dataFim || bounds.stop.fim}T${activity.horaFim || bounds.stop.horaFim || "23:59"}:00`);
-  return formatDuration(Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000)));
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
 }
 
 function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: TimelineBounds; onClick: () => void }) {
   const hasTimes = Boolean(activity.dataInicio && activity.horaInicio && activity.dataFim && activity.horaFim);
   const activityStartDate = activity.dataInicio || bounds.stop.inicio;
   const activityEndDate = activity.dataFim || activity.dataInicio || bounds.stop.fim;
+  const totalDurationMinutes = activityDurationMinutes(activity, bounds);
+  const firstScheduledDayIndex = bounds.days.findIndex(day => day.dateStr >= activityStartDate);
+  const lastScheduledDayIndex = bounds.days.findLastIndex(day => day.dateStr <= activityEndDate);
 
   const timeLabel = hasTimes ? `${activity.horaInicio} - ${activity.horaFim}` : `${bounds.stop.horaInicio} - ${bounds.stop.horaFim}`;
   const duration = activityDuration(activity, bounds);
@@ -611,12 +620,19 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
         className="grid h-10 min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm transition group-hover/gantt:border-blue-300"
         style={{ gridTemplateColumns: `repeat(${Math.max(bounds.days.length, 1)}, minmax(0, 1fr))` }}
       >
-        {bounds.days.map(day => {
-          const isScheduledDay = day.dateStr >= activityStartDate && day.dateStr <= activityEndDate;
-          return <span
-            key={day.dateStr}
-            className={`border-r border-slate-300/90 last:border-r-0 transition-all ${isScheduledDay ? "bg-gradient-to-r from-blue-700 to-blue-500 group-hover/gantt:brightness-110" : "bg-slate-100"}`}
-          />;
+        {bounds.days.map((day, dayIndex) => {
+          const isInsideActivityDates = firstScheduledDayIndex >= 0 && dayIndex >= firstScheduledDayIndex && dayIndex <= lastScheduledDayIndex;
+          const activityDayIndex = dayIndex - firstScheduledDayIndex;
+          const remainingMinutes = isInsideActivityDates ? totalDurationMinutes - activityDayIndex * 8 * 60 : 0;
+          const allocatedMinutes = Math.max(0, Math.min(8 * 60, remainingMinutes));
+          const fillPercent = (allocatedMinutes / (8 * 60)) * 100;
+          return <span key={day.dateStr} className="relative overflow-hidden border-r border-slate-300/90 bg-slate-100 last:border-r-0">
+            {fillPercent > 0 && <span
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-700 to-blue-500 transition-all group-hover/gantt:brightness-110"
+              style={{ width: `${fillPercent}%` }}
+              title={`${formatDuration(allocatedMinutes)} de 8h disponíveis em ${day.fullDate}`}
+            />}
+          </span>;
         })}
       </div>
     </div>
