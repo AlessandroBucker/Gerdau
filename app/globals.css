@@ -134,4 +134,25 @@ a:focus-visible {
     break-inside: avoid-page;
     page-break-inside: avoid;
   }
+  body:has(.stop-schedule-print) .stop-topic-item {
+    display: none !important;
+  }
+  body:has(.stop-schedule-print) .stop-topic-item.stop-topic-open {
+    display: block !important;
+    margin-top: 3mm !important;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+    border-color: #94a3b8 !important;
+  }
+  body:has(.stop-schedule-print) .stop-topic-open > button {
+    display: flex !important;
+    padding: 2mm 3mm !important;
+  }
+  body:has(.stop-schedule-print) .stop-topic-editor {
+    display: none !important;
+  }
+  body:has(.stop-schedule-print) .stop-topic-print-content {
+    display: block !important;
+  }
 }

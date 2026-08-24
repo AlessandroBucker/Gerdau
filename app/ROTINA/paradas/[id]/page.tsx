@@ -481,10 +481,18 @@ export default function StopSchedulePage() {
       `<Row>${columns.map(column => cell(column.label, "Header")).join("")}</Row>`,
       ...activities.map(activity => `<Row>${columns.map(column => cell(column.value(activity))).join("")}</Row>`),
     ].join("");
+    const openTopicRows = ([
+      { key: "preParada" as const, label: "Assuntos pré-parada" },
+      { key: "posParada" as const, label: "Assuntos pós-parada" },
+    ]).filter(topic => openTopics[topic.key]).map(topic => `<Row>${cell(topic.label, "Header")}${cell(topics[topic.key])}</Row>`).join("");
+    const topicsWorksheet = openTopicRows
+      ? `<Worksheet ss:Name="Assuntos"><Table><Row>${cell("Etapa", "Header")}${cell("Comentários", "Header")}</Row>${openTopicRows}</Table></Worksheet>`
+      : "";
     const workbook = `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>
       <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
         <Styles><Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#DCE6F1" ss:Pattern="Solid"/></Style></Styles>
         <Worksheet ss:Name="Atividades"><Table>${rows}</Table></Worksheet>
+        ${topicsWorksheet}
       </Workbook>`;
     const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -666,27 +674,30 @@ export default function StopSchedulePage() {
       </> : <div className="grid min-h-52 place-items-center p-8 text-center"><div><CalendarClock className="mx-auto text-slate-300" size={34} /><p className="mt-3 font-semibold text-slate-500">Nenhuma atividade cadastrada para esta parada.</p></div></div>}
     </section>
 
-    <section className="stop-print-hide mt-4 grid gap-3 lg:grid-cols-2">
+    <section className="stop-topics-print mt-4 grid gap-3">
       {([
         { key: "preParada" as const, title: "Assuntos pré-parada", placeholder: "Registre alinhamentos, pendências e observações anteriores à parada..." },
         { key: "posParada" as const, title: "Assuntos pós-parada", placeholder: "Registre conclusões, pendências e observações posteriores à parada..." },
       ]).map(item => {
         const isOpen = openTopics[item.key];
         const feedback = topicFeedback[item.key];
-        return <div key={item.key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        return <div key={item.key} className={`stop-topic-item overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${isOpen ? "stop-topic-open" : ""}`}>
           <button type="button" onClick={() => setOpenTopics(current => ({ ...current, [item.key]: !current[item.key] }))} className="flex w-full items-center gap-3 px-4 py-3.5 text-left font-bold text-slate-800 hover:bg-slate-50" aria-expanded={isOpen}>
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700"><MessageSquareText size={19} /></span>
             <span className="min-w-0 flex-1">{item.title}</span>
             {topics[item.key].trim() && <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" title="Possui conteúdo salvo" />}
             <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
           </button>
-          {isOpen && <div className="border-t border-slate-100 p-4">
-            <textarea value={topics[item.key]} onChange={event => { setTopics(current => ({ ...current, [item.key]: event.target.value })); setTopicFeedback(current => ({ ...current, [item.key]: "" })); }} rows={6} placeholder={item.placeholder} className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100" />
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <p className={`text-xs font-semibold ${feedback === "Salvo com sucesso." ? "text-emerald-600" : "text-red-600"}`}>{feedback}</p>
-              <button type="button" onClick={() => saveTopic(item.key)} disabled={savingTopic !== null} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"><Save size={16} /> {savingTopic === item.key ? "Salvando..." : "Salvar"}</button>
+          {isOpen && <>
+            <div className="stop-topic-editor border-t border-slate-100 p-4">
+              <textarea value={topics[item.key]} onChange={event => { setTopics(current => ({ ...current, [item.key]: event.target.value })); setTopicFeedback(current => ({ ...current, [item.key]: "" })); }} rows={6} placeholder={item.placeholder} className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100" />
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className={`text-xs font-semibold ${feedback === "Salvo com sucesso." ? "text-emerald-600" : "text-red-600"}`}>{feedback}</p>
+                <button type="button" onClick={() => saveTopic(item.key)} disabled={savingTopic !== null} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"><Save size={16} /> {savingTopic === item.key ? "Salvando..." : "Salvar"}</button>
+              </div>
             </div>
-          </div>}
+            <div className="stop-topic-print-content hidden whitespace-pre-wrap border-t border-slate-300 p-3 text-sm leading-5 text-slate-800">{topics[item.key] || "Sem comentários registrados."}</div>
+          </>}
         </div>;
       })}
     </section>
