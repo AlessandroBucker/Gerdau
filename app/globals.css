@@ -108,9 +108,13 @@ a:focus-visible {
     overflow: visible !important;
   }
   body:has(.stop-schedule-print) .stop-schedule-table {
+    display: block !important;
     height: auto !important;
     max-height: none !important;
     overflow: visible !important;
+  }
+  body:has(.stop-schedule-print) .stop-schedule-mobile {
+    display: none !important;
   }
   body:has(.stop-schedule-print) .stop-schedule-table table {
     min-width: 0 !important;

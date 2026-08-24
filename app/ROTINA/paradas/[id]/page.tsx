@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Download, Factory, FileSpreadsheet, FileText, GripVertical, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Download, Factory, FileSpreadsheet, FileText, GripVertical, MessageSquareText, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DataLoading } from "@/components/data-loading";
 
 type Stop = { id: string; area: string; tipo: string; inicio: string; fim: string; horaInicio: string; horaFim: string };
 type Activity = { id?: string; setor: string; especialidade: string; ordem: string; descricao: string; responsavel: string; equipe: string; observacoes: string; dataInicio?: string; horaInicio?: string; dataFim?: string; horaFim?: string; duracaoPrevistaMinutos?: number; permiteSabado?: boolean; permiteDomingo?: boolean; status?: string; quantidadeReprogramacoes?: number };
+type StopTopics = { preParada: string; posParada: string };
 const emptyActivity: Activity = { setor: "", especialidade: "", ordem: "", descricao: "", responsavel: "", equipe: "", observacoes: "", dataInicio: "", horaInicio: "", duracaoPrevistaMinutos: undefined, permiteSabado: false, permiteDomingo: false };
 
 function compareActivitiesByStart(left: Activity, right: Activity) {
@@ -164,11 +165,13 @@ export default function StopSchedulePage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [specialtyFilter, setSpecialtyFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [sectorFilter, setSectorFilter] = useState("");
-  const [responsibleFilter, setResponsibleFilter] = useState("");
+  const [selectedDay, setSelectedDay] = useState("");
+  const [topics, setTopics] = useState<StopTopics>({ preParada: "", posParada: "" });
+  const [openTopics, setOpenTopics] = useState<Record<keyof StopTopics, boolean>>({ preParada: false, posParada: false });
+  const [savingTopic, setSavingTopic] = useState<keyof StopTopics | null>(null);
+  const [topicFeedback, setTopicFeedback] = useState<Record<keyof StopTopics, string>>({ preParada: "", posParada: "" });
   const [columnWidths, setColumnWidths] = useState<Record<ScheduleColumn, number>>(defaultScheduleColumnWidths);
   const [columnWidthsLoaded, setColumnWidthsLoaded] = useState(false);
 
@@ -181,23 +184,23 @@ export default function StopSchedulePage() {
     [activities]
   );
 
-  const statusOptions = useMemo(
-    () => [...new Set(activities.map(activity => activity.status).filter((status): status is string => Boolean(status)))],
-    [activities]
-  );
+  const bounds = useMemo(() => (stop ? getTimelineBounds(stop) : null), [stop]);
 
   const filteredActivities = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("pt-BR");
     return activities.filter(activity => {
       const matchesSearch = !term || [activity.ordem, activity.descricao, activity.setor, activity.responsavel]
         .some(value => value.toLocaleLowerCase("pt-BR").includes(term));
-      return matchesSearch
-        && (!specialtyFilter || activity.especialidade === specialtyFilter)
-        && (!statusFilter || activity.status === statusFilter)
-        && (!sectorFilter || activity.setor === sectorFilter)
-        && (!responsibleFilter || activity.responsavel === responsibleFilter);
+      return matchesSearch && (!selectedDay || !bounds || activityOccursOnDay(activity, bounds, selectedDay));
     });
-  }, [activities, responsibleFilter, search, sectorFilter, specialtyFilter, statusFilter]);
+  }, [activities, bounds, search, selectedDay]);
+
+  const hasActiveFilters = Boolean(search.trim() || selectedDay);
+
+  function clearFilters() {
+    setSearch("");
+    setSelectedDay("");
+  }
 
   const sectors = useMemo(() => {
     const presentSectors = new Set(activities.map(activity => activity.setor).filter(Boolean));
@@ -211,7 +214,6 @@ export default function StopSchedulePage() {
     return sectors.filter(sector => matches.has(sector));
   }, [filteredActivities, sectors]);
 
-  const bounds = useMemo(() => (stop ? getTimelineBounds(stop) : null), [stop]);
   const totalColumnWidth = useMemo(() => Object.values(columnWidths).reduce((total, width) => total + width, 0), [columnWidths]);
 
   useEffect(() => {
@@ -246,8 +248,9 @@ export default function StopSchedulePage() {
     Promise.all([
       fetch("/api/rotina/stops", { cache: "no-store" }).then(response => response.json()),
       fetch(`/api/rotina/stops/${params.id}/activities`, { cache: "no-store" }).then(response => response.ok ? response.json() : ({ activities: [] })),
+      fetch(`/api/rotina/stops/${params.id}/topics`, { cache: "no-store" }).then(response => response.ok ? response.json() : ({ topics: { preParada: "", posParada: "" } })),
     ])
-      .then(([stopsData, activitiesData]) => {
+      .then(([stopsData, activitiesData, topicsData]) => {
         const selected = (stopsData.stops as Stop[]).find(item => item.id === params.id);
         if (!selected) throw new Error("Parada não encontrada.");
         setStop(selected);
@@ -255,6 +258,7 @@ export default function StopSchedulePage() {
         const loadedSectors = [...new Set([...(activitiesData.sectors ?? []), ...((activitiesData.activities ?? []) as Activity[]).map(activity => activity.setor).filter(Boolean)])];
         setSectorOptions(loadedSectors);
         setOrderedSectors(loadedSectors);
+        setTopics(topicsData.topics ?? { preParada: "", posParada: "" });
       })
       .catch(reason => setError(reason instanceof Error ? reason.message : "Não foi possível carregar a parada."))
       .finally(() => setLoading(false));
@@ -275,8 +279,16 @@ export default function StopSchedulePage() {
 
   function openActivity(activity?: Activity) {
     setFormError("");
-    if (activity) setEditing({ ...activity });
-    else setNewActivities([{ ...emptyActivity, dataInicio: stop?.inicio ?? "", horaInicio: stop?.horaInicio ?? "" }]);
+    if (activity) {
+      setEditing({ ...activity });
+      return;
+    }
+    const blankActivity = { ...emptyActivity, dataInicio: stop?.inicio ?? "", horaInicio: stop?.horaInicio ?? "" };
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setEditing(blankActivity);
+    } else {
+      setNewActivities([blankActivity]);
+    }
   }
 
   function toggleSectorCollapse(sector: string) {
@@ -399,9 +411,29 @@ export default function StopSchedulePage() {
     } finally { setSaving(false); }
   }
 
+  async function saveTopic(key: keyof StopTopics) {
+    setSavingTopic(key);
+    setTopicFeedback(current => ({ ...current, [key]: "" }));
+    try {
+      const response = await fetch(`/api/rotina/stops/${params.id}/topics`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ etapa: key === "preParada" ? "pre_parada" : "pos_parada", conteudo: topics[key] }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível salvar.");
+      setTopicFeedback(current => ({ ...current, [key]: "Salvo com sucesso." }));
+    } catch (error) {
+      setTopicFeedback(current => ({ ...current, [key]: error instanceof Error ? error.message : "Não foi possível salvar." }));
+    } finally {
+      setSavingTopic(null);
+    }
+  }
+
   function downloadPdf(orientation: "portrait" | "landscape") {
     if (!stop) return;
     setExportOpen(false);
+    setCollapsedSectors({});
     const printArea = document.querySelector(".stop-schedule-print");
     printArea?.classList.toggle("stop-print-landscape", orientation === "landscape");
     const previousTitle = document.title;
@@ -410,7 +442,7 @@ export default function StopSchedulePage() {
       document.title = previousTitle;
       printArea?.classList.remove("stop-print-landscape");
     }, { once: true });
-    window.print();
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
   }
 
   function exportExcel() {
@@ -465,7 +497,7 @@ export default function StopSchedulePage() {
     URL.revokeObjectURL(url);
   }
 
-  return <div className="stop-schedule-print pb-24 lg:pb-0">
+  return <div className="stop-schedule-print pb-20 lg:pb-0">
     <header className="sticky top-0 z-30 mb-3 bg-slate-50/95 py-2 backdrop-blur lg:mb-5 lg:flex lg:flex-wrap lg:items-center lg:gap-3 lg:py-3">
       <div className="flex min-w-0 items-center gap-2 lg:contents">
         <Link href="/ROTINA/paradas" className="stop-print-hide grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 lg:h-11 lg:w-11" aria-label="Voltar"><ArrowLeft size={20} /></Link>
@@ -481,69 +513,104 @@ export default function StopSchedulePage() {
           </p>
         </div>
       </div>
+      <label className="stop-print-hide relative hidden w-72 lg:block xl:w-96">
+        <span className="sr-only">Buscar atividade ou ordem</span>
+        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+        <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar atividade ou ordem" className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
+      </label>
       <button onClick={() => openActivity()} className="stop-print-hide hidden items-center gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm font-bold text-brand-700 shadow-sm hover:bg-brand-50 lg:inline-flex"><Plus size={18} /> Incluir atividade</button>
-      <div className="stop-print-hide relative mt-2 flex justify-end lg:mt-0">
-        <button
-          type="button"
-          onClick={() => setExportOpen(open => !open)}
-          aria-haspopup="menu"
-          aria-expanded={exportOpen}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 lg:border-transparent lg:bg-brand-600 lg:px-4 lg:py-2.5 lg:text-sm lg:text-white lg:hover:bg-brand-700"
-        >
-          <Download size={18} /> Exportar cronograma <ChevronDown size={16} />
-        </button>
-        {exportOpen && <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
-          <button type="button" role="menuitem" onClick={() => downloadPdf("portrait")} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700">
-            <FileText size={18} /> PDF vertical
+      <div className="stop-print-hide hidden lg:flex lg:justify-end">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setExportOpen(open => !open)}
+            aria-haspopup="menu"
+            aria-expanded={exportOpen}
+            aria-label="Exportar cronograma"
+            title="Exportar cronograma"
+            className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 lg:inline-flex lg:h-auto lg:w-auto lg:gap-2 lg:border-transparent lg:bg-brand-600 lg:px-4 lg:py-2.5 lg:text-sm lg:text-white lg:hover:bg-brand-700"
+          >
+            <Download size={18} /> <span className="hidden lg:inline">Exportar</span> <ChevronDown className="hidden lg:block" size={16} />
           </button>
-          <button type="button" role="menuitem" onClick={() => downloadPdf("landscape")} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700">
-            <FileText size={18} /> PDF horizontal
-          </button>
-          <button type="button" role="menuitem" onClick={exportExcel} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700">
-            <FileSpreadsheet size={18} /> Exportar como Excel
-          </button>
-        </div>}
+          {exportOpen && <ExportMenu onPdf={downloadPdf} onExcel={exportExcel} />}
+        </div>
       </div>
     </header>
 
-    {activities.length > 0 && <div className="stop-print-hide mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+    {activities.length > 0 && <div className={`stop-print-hide mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:hidden ${filtersOpen ? "block" : "hidden"}`}>
       <label className="relative block">
         <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
         <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar atividade ou ordem" className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-medium text-slate-800 outline-none transition focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100" />
       </label>
-      <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <ScheduleFilter label="Especialidade" value={specialtyFilter} options={specialtyOptions} onChange={setSpecialtyFilter} />
-        <ScheduleFilter label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
-        <ScheduleFilter label="Setor" value={sectorFilter} options={sectors} onChange={setSectorFilter} />
-        <ScheduleFilter label="Responsável" value={responsibleFilter} options={responsibleOptions} onChange={setResponsibleFilter} />
+      <div className="mt-2 flex items-center justify-between gap-3 px-1 text-xs">
+        <span className="font-semibold text-slate-500">{filteredActivities.length} {filteredActivities.length === 1 ? "resultado" : "resultados"}</span>
+        {hasActiveFilters && <button type="button" onClick={clearFilters} className="font-bold text-brand-700 hover:text-brand-800 hover:underline">Limpar filtros</button>}
       </div>
     </div>}
 
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
-      {filteredActivities.length ? <div className="stop-schedule-table max-h-[calc(100vh-112px)] overflow-auto"><table className="w-full min-w-[1380px] table-fixed text-left text-sm">
+      {activities.length ? <>
+        <div className="stop-schedule-mobile divide-y divide-slate-200 lg:hidden">
+          {visibleSectors.map(sector => {
+            const sectorActivities = filteredActivities
+              .filter(activity => activity.setor === sector)
+              .sort(compareActivitiesByStart);
+            const isCollapsed = Boolean(collapsedSectors[sector]);
+            return <div key={sector}>
+              <button type="button" onClick={() => toggleSectorCollapse(sector)} className="flex w-full items-center gap-2 bg-brand-50/80 px-4 py-3 text-left text-brand-950" aria-expanded={!isCollapsed}>
+                <ChevronDown size={17} className={`shrink-0 text-brand-700 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                <span className="min-w-0 flex-1 truncate text-sm font-extrabold uppercase tracking-wide">{sector}</span>
+                <span className="shrink-0 rounded-full border border-brand-100 bg-brand-100/80 px-2 py-0.5 text-[10px] font-extrabold uppercase text-brand-800">{sectorActivities.length} {sectorActivities.length === 1 ? "atividade" : "atividades"}</span>
+              </button>
+              {!isCollapsed && <div className="divide-y divide-slate-100">
+                {sectorActivities.map((activity, index) => <button key={activity.id ?? `${sector}-${index}`} type="button" onClick={() => openActivity(activity)} className="block w-full px-4 py-3 text-left transition active:bg-brand-50">
+                  <span className="flex min-w-0 items-center gap-2 text-xs">
+                    <span className="truncate font-bold text-slate-700">{activity.especialidade || "Sem especialidade"}</span>
+                    {activity.ordem && <span className="shrink-0 rounded-md bg-brand-50 px-2 py-0.5 font-mono font-bold text-brand-700">{activity.ordem}</span>}
+                    <span className="ml-auto shrink-0 font-medium text-slate-500">{formatDate(activity.dataInicio || stop.inicio).slice(0, 5)} {activity.horaInicio || stop.horaInicio}</span>
+                  </span>
+                  <span className="mt-1.5 block whitespace-normal break-words text-sm font-medium leading-5 text-slate-900">{activity.descricao}</span>
+                </button>)}
+              </div>}
+            </div>;
+          })}
+          {filteredActivities.length === 0 && <div className="grid min-h-40 place-items-center px-6 py-8 text-center"><div><CalendarClock className="mx-auto text-slate-300" size={30} /><p className="mt-2 text-sm font-semibold text-slate-500">Nenhuma atividade encontrada neste dia.</p></div></div>}
+        </div>
+        <div className="stop-schedule-table hidden max-h-[calc(100vh-112px)] overflow-auto lg:block"><table className="w-full min-w-[1380px] table-fixed text-left text-sm">
         <colgroup>
           {(Object.keys(columnWidths) as ScheduleColumn[]).map(column => <col key={column} style={{ width: `${(columnWidths[column] / totalColumnWidth) * 100}%` }} />)}
         </colgroup>
-        <thead className="sticky top-0 z-20 bg-slate-100 text-xs font-bold uppercase tracking-wide text-slate-600 shadow-sm">
+        <thead className="sticky top-0 z-20 bg-slate-100 text-[10px] font-bold uppercase leading-tight tracking-normal text-slate-600 shadow-sm lg:text-xs lg:tracking-wide">
           <tr>
-            <th className="relative px-3 py-3">Especialidade<ColumnResizeHandle onMouseDown={event => startColumnResize("especialidade", event)} /></th>
-            <th className="relative px-3 py-3">Ordem<ColumnResizeHandle onMouseDown={event => startColumnResize("ordem", event)} /></th>
-            <th className="relative px-3 py-3">Descrição da atividade<ColumnResizeHandle onMouseDown={event => startColumnResize("descricao", event)} /></th>
-            <th className="relative px-3 py-3">Responsável<ColumnResizeHandle onMouseDown={event => startColumnResize("responsavel", event)} /></th>
-            <th className="relative px-3 py-3">Equipe<ColumnResizeHandle onMouseDown={event => startColumnResize("equipe", event)} /></th>
-            <th className="relative px-3 py-3">Observações<ColumnResizeHandle onMouseDown={event => startColumnResize("observacoes", event)} /></th>
+            <th className="relative whitespace-normal break-words px-2 py-2.5 lg:px-3 lg:py-3">Especialidade<ColumnResizeHandle onMouseDown={event => startColumnResize("especialidade", event)} /></th>
+            <th className="relative whitespace-normal break-words px-2 py-2.5 lg:px-3 lg:py-3">Ordem<ColumnResizeHandle onMouseDown={event => startColumnResize("ordem", event)} /></th>
+            <th className="relative whitespace-normal break-words px-2 py-2.5 lg:px-3 lg:py-3">Descrição da atividade<ColumnResizeHandle onMouseDown={event => startColumnResize("descricao", event)} /></th>
+            <th className="relative whitespace-normal break-words px-2 py-2.5 lg:px-3 lg:py-3">Responsável<ColumnResizeHandle onMouseDown={event => startColumnResize("responsavel", event)} /></th>
+            <th className="relative whitespace-normal break-words px-2 py-2.5 lg:px-3 lg:py-3">Equipe<ColumnResizeHandle onMouseDown={event => startColumnResize("equipe", event)} /></th>
+            <th className="relative whitespace-normal break-words px-2 py-2.5 lg:px-3 lg:py-3">Observações<ColumnResizeHandle onMouseDown={event => startColumnResize("observacoes", event)} /></th>
             <th className="relative min-w-[320px] px-3 py-2">
               <div className="flex w-full overflow-hidden rounded-md border border-slate-300 bg-slate-100 shadow-2xs divide-x divide-slate-300">
                 {bounds.days.map((day) => (
                   <div
                     key={day.dateStr}
-                    className="flex flex-col items-center justify-center py-1 text-center bg-white/90"
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={selectedDay === day.dateStr}
+                    title={selectedDay === day.dateStr ? `Remover filtro de ${day.fullDate}` : `Exibir atividades de ${day.fullDate}`}
+                    onClick={() => setSelectedDay(current => current === day.dateStr ? "" : day.dateStr)}
+                    onKeyDown={event => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedDay(current => current === day.dateStr ? "" : day.dateStr);
+                      }
+                    }}
+                    className={`flex cursor-pointer flex-col items-center justify-center py-1 text-center outline-none transition focus:ring-2 focus:ring-inset focus:ring-brand-500 ${selectedDay === day.dateStr ? "bg-brand-600 text-white" : "bg-white/90 hover:bg-brand-50"}`}
                     style={{ width: `${day.widthPercent}%` }}
                   >
-                    <span className="font-mono text-[10px] font-bold text-slate-800 leading-tight">
+                    <span className={`font-mono text-[10px] font-bold leading-tight ${selectedDay === day.dateStr ? "text-white" : "text-slate-800"}`}>
                       {day.label}
                     </span>
-                    <span className="text-[9px] font-bold text-slate-500 uppercase leading-none">
+                    <span className={`text-[9px] font-bold uppercase leading-none ${selectedDay === day.dateStr ? "text-brand-100" : "text-slate-500"}`}>
                       {day.weekday}
                     </span>
                   </div>
@@ -593,13 +660,51 @@ export default function StopSchedulePage() {
               onSelect={openActivity}
             />
           ))}
+          {filteredActivities.length === 0 && <tr><td colSpan={7} className="h-32 px-6 text-center"><CalendarClock className="mx-auto text-slate-300" size={28} /><p className="mt-2 font-semibold text-slate-500">Nenhuma atividade encontrada neste dia. Selecione outra data no cabeçalho.</p></td></tr>}
         </tbody>
-      </table></div> : <div className="grid min-h-52 place-items-center p-8 text-center"><div><CalendarClock className="mx-auto text-slate-300" size={34} /><p className="mt-3 font-semibold text-slate-500">{activities.length ? "Nenhuma atividade encontrada com estes filtros." : "Nenhuma atividade cadastrada para esta parada."}</p></div></div>}
+      </table></div>
+      </> : <div className="grid min-h-52 place-items-center p-8 text-center"><div><CalendarClock className="mx-auto text-slate-300" size={34} /><p className="mt-3 font-semibold text-slate-500">Nenhuma atividade cadastrada para esta parada.</p></div></div>}
     </section>
 
-    <div className="stop-print-hide fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.10)] backdrop-blur lg:hidden">
-      <button onClick={() => openActivity()} className="mx-auto flex h-12 w-full max-w-lg items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-bold text-white shadow-lg shadow-brand-600/20 active:bg-brand-700"><Plus size={20} /> Incluir atividade</button>
+    <section className="stop-print-hide mt-4 grid gap-3 lg:grid-cols-2">
+      {([
+        { key: "preParada" as const, title: "Assuntos pré-parada", placeholder: "Registre alinhamentos, pendências e observações anteriores à parada..." },
+        { key: "posParada" as const, title: "Assuntos pós-parada", placeholder: "Registre conclusões, pendências e observações posteriores à parada..." },
+      ]).map(item => {
+        const isOpen = openTopics[item.key];
+        const feedback = topicFeedback[item.key];
+        return <div key={item.key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <button type="button" onClick={() => setOpenTopics(current => ({ ...current, [item.key]: !current[item.key] }))} className="flex w-full items-center gap-3 px-4 py-3.5 text-left font-bold text-slate-800 hover:bg-slate-50" aria-expanded={isOpen}>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-700"><MessageSquareText size={19} /></span>
+            <span className="min-w-0 flex-1">{item.title}</span>
+            {topics[item.key].trim() && <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" title="Possui conteúdo salvo" />}
+            <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+          </button>
+          {isOpen && <div className="border-t border-slate-100 p-4">
+            <textarea value={topics[item.key]} onChange={event => { setTopics(current => ({ ...current, [item.key]: event.target.value })); setTopicFeedback(current => ({ ...current, [item.key]: "" })); }} rows={6} placeholder={item.placeholder} className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100" />
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <p className={`text-xs font-semibold ${feedback === "Salvo com sucesso." ? "text-emerald-600" : "text-red-600"}`}>{feedback}</p>
+              <button type="button" onClick={() => saveTopic(item.key)} disabled={savingTopic !== null} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"><Save size={16} /> {savingTopic === item.key ? "Salvando..." : "Salvar"}</button>
+            </div>
+          </div>}
+        </div>;
+      })}
+    </section>
+
+    <div className="stop-print-hide fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.10)] backdrop-blur lg:hidden">
+      <div className="mx-auto flex w-full max-w-lg items-center gap-2">
+        <button type="button" onClick={() => openActivity()} aria-label="Incluir atividade" title="Incluir atividade" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 text-sm font-bold text-white shadow-sm active:bg-brand-700"><Plus size={20} /> Incluir atividade</button>
+        <button type="button" onClick={() => setFiltersOpen(open => !open)} aria-label="Buscar e filtrar atividades" aria-expanded={filtersOpen} className={`relative grid h-10 w-10 place-items-center rounded-xl border shadow-sm ${filtersOpen || hasActiveFilters ? "border-brand-300 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600"}`}>
+          <Search size={19} />
+          {hasActiveFilters && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-brand-600 ring-2 ring-white" />}
+        </button>
+        <div className="relative">
+          <button type="button" onClick={() => setExportOpen(open => !open)} aria-haspopup="menu" aria-expanded={exportOpen} aria-label="Exportar cronograma" title="Exportar cronograma" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm active:bg-slate-50"><Download size={19} /></button>
+          {exportOpen && <ExportMenu onPdf={downloadPdf} onExcel={exportExcel} placement="up" />}
+        </div>
+      </div>
     </div>
+
     {editing && <ActivityDialog activity={editing} stop={stop} sectors={sectorOptions} specialties={specialtyOptions} responsibles={responsibleOptions} saving={saving} error={formError} onChange={setEditing} onClose={() => !saving && setEditing(null)} onSave={saveActivity} onDelete={activity => setDeletingActivity(activity)} />}
     {newActivities && <BatchActivityDialog activities={newActivities} stop={stop} saving={saving} error={formError} onChange={setNewActivities} onClose={() => !saving && setNewActivities(null)} onSave={saveNewActivities} />}
     {editingStop && <StopDialog stop={editingStop} saving={saving} error={formError} onChange={setEditingStop} onClose={() => !saving && setEditingStop(null)} onSave={saveStop} />}
@@ -607,18 +712,12 @@ export default function StopSchedulePage() {
   </div>;
 }
 
-function ScheduleFilter({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
-  return <label className="min-w-0">
-    <span className="sr-only">Filtrar por {label.toLocaleLowerCase("pt-BR")}</span>
-    <select
-      value={value}
-      onChange={event => onChange(event.target.value)}
-      className={`h-10 w-full truncate rounded-xl border px-2.5 text-xs font-semibold outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 ${value ? "border-brand-300 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600"}`}
-    >
-      <option value="">{label}: todos</option>
-      {options.map(option => <option key={option} value={option}>{option}</option>)}
-    </select>
-  </label>;
+function ExportMenu({ onPdf, onExcel, placement = "down" }: { onPdf: (orientation: "portrait" | "landscape") => void; onExcel: () => void; placement?: "up" | "down" }) {
+  return <div role="menu" className={`absolute z-40 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ${placement === "up" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"}`}>
+    <button type="button" role="menuitem" onClick={() => onPdf("portrait")} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700"><FileText size={18} /> PDF vertical</button>
+    <button type="button" role="menuitem" onClick={() => onPdf("landscape")} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50 hover:text-brand-700"><FileText size={18} /> PDF horizontal</button>
+    <button type="button" role="menuitem" onClick={onExcel} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700"><FileSpreadsheet size={18} /> Exportar como Excel</button>
+  </div>;
 }
 
 function ColumnResizeHandle({ onMouseDown }: { onMouseDown: (event: React.MouseEvent) => void }) {
@@ -726,6 +825,20 @@ function SectorRows({
 
 function activityDuration(activity: Activity, bounds: TimelineBounds) {
   return formatDuration(activityDurationMinutes(activity, bounds));
+}
+
+function activityOccursOnDay(activity: Activity, bounds: TimelineBounds, date: string) {
+  const activityStartDate = activity.dataInicio || bounds.stop.inicio;
+  if (date < activityStartDate) return false;
+  const eligibleDays = bounds.days.filter(day => {
+    if (day.dateStr < activityStartDate) return false;
+    const weekDay = new Date(`${day.dateStr}T12:00:00`).getDay();
+    if (weekDay === 6) return activity.permiteSabado === true;
+    if (weekDay === 0) return activity.permiteDomingo === true;
+    return true;
+  });
+  const dayIndex = eligibleDays.findIndex(day => day.dateStr === date);
+  return dayIndex >= 0 && activityDurationMinutes(activity, bounds) - dayIndex * 8 * 60 > 0;
 }
 
 function activityDurationMinutes(activity: Activity, bounds: TimelineBounds) {
@@ -886,10 +999,10 @@ function ActivityDialog({ activity, stop, sectors, specialties, responsibles, sa
   const field = (key: keyof Activity, value: string) => onChange({ ...activity, [key]: value });
   const executionMinutes = activity.duracaoPrevistaMinutos ?? 0;
 
-  return <div className="stop-print-hide fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={event => event.target === event.currentTarget && onClose()}>
-    <div role="dialog" aria-modal="true" aria-labelledby="activity-dialog-title" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-      <div className="flex items-center border-b border-slate-200 px-5 py-4"><div className="min-w-0 flex-1"><h2 id="activity-dialog-title" className="text-lg font-bold text-slate-900">{activity.id ? "Editar atividade" : "Incluir atividade"}</h2><p className="text-sm text-slate-500">Informe o início e o tempo necessário para a execução.</p></div><button onClick={onClose} disabled={saving} className="grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Fechar"><X size={20} /></button></div>
-      <div className="grid gap-4 p-5 sm:grid-cols-2">
+  return <div className="stop-print-hide fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-0 sm:p-4" onMouseDown={event => event.target === event.currentTarget && onClose()}>
+    <div role="dialog" aria-modal="true" aria-labelledby="activity-dialog-title" className="flex h-full w-full max-w-2xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+      <div className="flex shrink-0 items-center border-b border-slate-200 px-4 py-3 sm:px-5 sm:py-4"><div className="min-w-0 flex-1"><h2 id="activity-dialog-title" className="text-lg font-bold text-slate-900">{activity.id ? "Editar atividade" : "Incluir atividade"}</h2><p className="text-sm text-slate-500">Preencha os dados de uma atividade.</p></div><button onClick={onClose} disabled={saving} className="grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Fechar"><X size={20} /></button></div>
+      <div className="grid flex-1 gap-4 overflow-y-auto p-4 sm:grid-cols-2 sm:p-5">
         <CreatableSelect
           label="Setor"
           required
@@ -962,7 +1075,7 @@ function ActivityDialog({ activity, stop, sectors, specialties, responsibles, sa
 
         {error && <p className="sm:col-span-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
       </div>
-      <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-5 py-4">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:gap-3 sm:px-5 sm:py-4">
         {(activity.id || activity.descricao) && (
           <button
             type="button"
@@ -974,8 +1087,8 @@ function ActivityDialog({ activity, stop, sectors, specialties, responsibles, sa
           </button>
         )}
         <div className="flex-1" />
-        <button onClick={onClose} disabled={saving} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
-        <button onClick={onSave} disabled={saving || !activity.setor.trim() || !activity.descricao.trim() || !activity.duracaoPrevistaMinutos} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"><Save size={17} /> {saving ? "Salvando..." : "Salvar"}</button>
+        <button onClick={onClose} disabled={saving} className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 sm:px-4">Cancelar</button>
+        <button onClick={onSave} disabled={saving || !activity.setor.trim() || !activity.descricao.trim() || !activity.duracaoPrevistaMinutos} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50 sm:px-4"><Save size={17} /> {saving ? "Salvando..." : "Salvar atividade"}</button>
       </div>
     </div>
   </div>;
