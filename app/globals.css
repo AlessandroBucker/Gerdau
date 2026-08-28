@@ -130,6 +130,49 @@ a:focus-visible {
     min-width: 0 !important;
     padding: 1.5mm 2mm !important;
   }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table table {
+    table-layout: fixed !important;
+    font-size: 5.5pt !important;
+    line-height: 1.18 !important;
+  }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table col:nth-child(1) { width: 9% !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table col:nth-child(2) { width: 8% !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table col:nth-child(3) { width: 20% !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table col:nth-child(4) { width: 10% !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table col:nth-child(5) { width: 10% !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table col:nth-child(6) { width: 11% !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table col:nth-child(7) { width: 20% !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table col:nth-child(8) { width: 12% !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table table:not(:has(col:nth-child(8))) col:nth-child(7) { width: 32% !important; }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table th,
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table td {
+    padding: 0.8mm 1mm !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+    white-space: normal !important;
+  }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table td > div {
+    gap: 0.5mm !important;
+  }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table label,
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table thead th:nth-child(7) > div > span {
+    width: 9mm !important;
+  }
+  body:has(.stop-schedule-print) .stop-schedule-print:not(.stop-print-landscape) .stop-schedule-table input {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: 7mm !important;
+    padding: 0.5mm 2.5mm 0.5mm 0.5mm !important;
+    font-size: 6pt !important;
+  }
+  body:has(.stop-schedule-print) .stop-evolution-comment-input { display: none !important; }
+  body:has(.stop-schedule-print) .stop-evolution-comment-print {
+    display: block !important;
+    max-width: 100% !important;
+    overflow-wrap: anywhere !important;
+    white-space: normal !important;
+  }
+
   body:has(.stop-schedule-print) .stop-schedule-table tr {
     break-inside: avoid-page;
     page-break-inside: avoid;

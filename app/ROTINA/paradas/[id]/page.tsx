@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Download, Factory, FileSpreadsheet, FileText, GripVertical, MessageSquareText, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, ChevronDown, ChevronRight, Download, Factory, FileSpreadsheet, FileText, GripVertical, ListChecks, MessageSquareText, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DataLoading } from "@/components/data-loading";
 
 type Stop = { id: string; area: string; tipo: string; inicio: string; fim: string; horaInicio: string; horaFim: string };
-type Activity = { id?: string; setor: string; especialidade: string; ordem: string; descricao: string; responsavel: string; equipe: string; observacoes: string; dataInicio?: string; horaInicio?: string; dataFim?: string; horaFim?: string; duracaoPrevistaMinutos?: number; permiteSabado?: boolean; permiteDomingo?: boolean; status?: string; quantidadeReprogramacoes?: number };
+type Activity = { id?: string; setor: string; especialidade: string; ordem: string; descricao: string; responsavel: string; equipe: string; observacoes: string; dataInicio?: string; horaInicio?: string; dataFim?: string; horaFim?: string; duracaoPrevistaMinutos?: number; permiteSabado?: boolean; permiteDomingo?: boolean; status?: string; percentualConclusao?: number; comentarioEvolucao?: string; quantidadeReprogramacoes?: number };
 type StopTopics = { preParada: string; posParada: string };
 const emptyActivity: Activity = { setor: "", especialidade: "", ordem: "", descricao: "", responsavel: "", equipe: "", observacoes: "", dataInicio: "", horaInicio: "", duracaoPrevistaMinutos: undefined, permiteSabado: false, permiteDomingo: false };
 
@@ -86,7 +86,7 @@ function formatDuration(minutes?: number | null, dataInicio?: string, horaInicio
 
 type DaySlot = { dateStr: string; label: string; weekday: string; fullDate: string; widthPercent: number };
 type TimelineBounds = { start: Date; end: Date; startMs: number; endMs: number; totalMs: number; days: DaySlot[]; stop: Stop };
-type ScheduleColumn = "especialidade" | "ordem" | "descricao" | "responsavel" | "equipe" | "observacoes" | "gantt";
+type ScheduleColumn = "especialidade" | "ordem" | "descricao" | "responsavel" | "equipe" | "observacoes" | "gantt" | "comentarioEvolucao";
 
 const defaultScheduleColumnWidths: Record<ScheduleColumn, number> = {
   especialidade: 150,
@@ -96,7 +96,10 @@ const defaultScheduleColumnWidths: Record<ScheduleColumn, number> = {
   equipe: 140,
   observacoes: 180,
   gantt: 420,
+  comentarioEvolucao: 240,
 };
+
+const scheduleColumns = Object.keys(defaultScheduleColumnWidths) as ScheduleColumn[];
 
 const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -174,6 +177,9 @@ export default function StopSchedulePage() {
   const [topicFeedback, setTopicFeedback] = useState<Record<keyof StopTopics, string>>({ preParada: "", posParada: "" });
   const [columnWidths, setColumnWidths] = useState<Record<ScheduleColumn, number>>(defaultScheduleColumnWidths);
   const [columnWidthsLoaded, setColumnWidthsLoaded] = useState(false);
+  const [trackingActivities, setTrackingActivities] = useState(false);
+  const [savingProgress, setSavingProgress] = useState<Record<string, boolean>>({});
+  const [savingComment, setSavingComment] = useState<Record<string, boolean>>({});
 
   const specialtyOptions = useMemo(
     () => [...new Set([...defaultSpecialties, ...activities.map(activity => activity.especialidade).filter(Boolean)])],
@@ -214,12 +220,20 @@ export default function StopSchedulePage() {
     return sectors.filter(sector => matches.has(sector));
   }, [filteredActivities, sectors]);
 
-  const totalColumnWidth = useMemo(() => Object.values(columnWidths).reduce((total, width) => total + width, 0), [columnWidths]);
+  const visibleColumns = useMemo<ScheduleColumn[]>(() => scheduleColumns.filter(column => trackingActivities || column !== "comentarioEvolucao"), [trackingActivities]);
+  const visibleColumnWidth = useMemo(() => visibleColumns.reduce((total, column) => total + columnWidths[column], 0), [columnWidths, visibleColumns]);
 
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem("stop-schedule-column-widths");
-      if (saved) setColumnWidths({ ...defaultScheduleColumnWidths, ...JSON.parse(saved) });
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<Record<ScheduleColumn, number>>;
+        const sanitized = { ...defaultScheduleColumnWidths };
+        scheduleColumns.forEach(column => {
+          if (Number.isFinite(parsed[column]) && Number(parsed[column]) >= 80) sanitized[column] = Number(parsed[column]);
+        });
+        setColumnWidths(sanitized);
+      }
     } catch { /* Mantém as larguras padrão. */ }
     setColumnWidthsLoaded(true);
   }, []);
@@ -275,6 +289,48 @@ export default function StopSchedulePage() {
     const loadedSectors = [...new Set([...(data.sectors ?? []), ...((data.activities ?? []) as Activity[]).map(activity => activity.setor).filter(Boolean)])];
     setSectorOptions(loadedSectors);
     setOrderedSectors(prev => [...new Set([...prev, ...loadedSectors])]);
+  }
+
+  async function saveProgress(activity: Activity, rawValue: number) {
+    if (!activity.id) return;
+    const percentualConclusao = Math.max(0, Math.min(100, Math.round(rawValue)));
+    setActivities(current => current.map(item => item.id === activity.id ? { ...item, percentualConclusao } : item));
+    setSavingProgress(current => ({ ...current, [activity.id!]: true }));
+    try {
+      const response = await fetch(`/api/rotina/stops/${params.id}/activities`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "progress", atividadeId: activity.id, percentualConclusao }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível salvar a evolução.");
+      setActivities(current => current.map(item => item.id === activity.id ? { ...item, percentualConclusao: data.percentualConclusao, status: data.status } : item));
+    } catch (reason) {
+      setFormError(reason instanceof Error ? reason.message : "Não foi possível salvar a evolução.");
+      await reloadActivities();
+    } finally {
+      setSavingProgress(current => ({ ...current, [activity.id!]: false }));
+    }
+  }
+
+  async function saveEvolutionComment(activity: Activity, comentarioEvolucao: string) {
+    if (!activity.id || comentarioEvolucao === (activity.comentarioEvolucao ?? "")) return;
+    setSavingComment(current => ({ ...current, [activity.id!]: true }));
+    try {
+      const response = await fetch(`/api/rotina/stops/${params.id}/activities`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "progress-comment", atividadeId: activity.id, comentarioEvolucao }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível salvar o comentário da evolução.");
+      setActivities(current => current.map(item => item.id === activity.id ? { ...item, comentarioEvolucao: data.comentarioEvolucao } : item));
+    } catch (reason) {
+      setFormError(reason instanceof Error ? reason.message : "Não foi possível salvar o comentário da evolução.");
+      await reloadActivities();
+    } finally {
+      setSavingComment(current => ({ ...current, [activity.id!]: false }));
+    }
   }
 
   function openActivity(activity?: Activity) {
@@ -527,6 +583,7 @@ export default function StopSchedulePage() {
         <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar atividade ou ordem" className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
       </label>
       <button onClick={() => openActivity()} className="stop-print-hide hidden items-center gap-2 rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm font-bold text-brand-700 shadow-sm hover:bg-brand-50 lg:inline-flex"><Plus size={18} /> Incluir atividade</button>
+      <button type="button" onClick={() => setTrackingActivities(active => !active)} aria-pressed={trackingActivities} className={`stop-print-hide hidden items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold shadow-sm lg:inline-flex ${trackingActivities ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}><ListChecks size={18} /> Acompanhar atividades</button>
       <div className="stop-print-hide hidden lg:flex lg:justify-end">
         <div className="relative">
           <button
@@ -586,7 +643,7 @@ export default function StopSchedulePage() {
         </div>
         <div className="stop-schedule-table hidden max-h-[calc(100vh-112px)] overflow-auto lg:block"><table className="w-full min-w-[1380px] table-fixed text-left text-sm">
         <colgroup>
-          {(Object.keys(columnWidths) as ScheduleColumn[]).map(column => <col key={column} style={{ width: `${(columnWidths[column] / totalColumnWidth) * 100}%` }} />)}
+          {visibleColumns.map(column => <col key={column} style={{ width: `${(columnWidths[column] / visibleColumnWidth) * 100}%` }} />)}
         </colgroup>
         <thead className="sticky top-0 z-20 bg-slate-100 text-[10px] font-bold uppercase leading-tight tracking-normal text-slate-600 shadow-sm lg:text-xs lg:tracking-wide">
           <tr>
@@ -597,7 +654,9 @@ export default function StopSchedulePage() {
             <th className="relative whitespace-normal break-words px-2 py-2.5 lg:px-3 lg:py-3">Equipe<ColumnResizeHandle onMouseDown={event => startColumnResize("equipe", event)} /></th>
             <th className="relative whitespace-normal break-words px-2 py-2.5 lg:px-3 lg:py-3">Observações<ColumnResizeHandle onMouseDown={event => startColumnResize("observacoes", event)} /></th>
             <th className="relative min-w-[320px] px-3 py-2">
-              <div className="flex w-full overflow-hidden rounded-md border border-slate-300 bg-slate-100 shadow-2xs divide-x divide-slate-300">
+              <div className="flex w-full items-stretch gap-2">
+                {trackingActivities && <span className="grid w-20 shrink-0 place-items-center rounded-md border border-slate-300 bg-white text-[9px] font-bold text-slate-600">Evolução</span>}
+                <div className="flex min-w-0 flex-1 overflow-hidden rounded-md border border-slate-300 bg-slate-100 shadow-2xs divide-x divide-slate-300">
                 {bounds.days.map((day) => (
                   <div
                     key={day.dateStr}
@@ -623,9 +682,11 @@ export default function StopSchedulePage() {
                     </span>
                   </div>
                 ))}
+                </div>
               </div>
               <ColumnResizeHandle onMouseDown={event => startColumnResize("gantt", event)} />
             </th>
+            {trackingActivities && <th className="relative whitespace-normal break-words px-2 py-2.5 lg:px-3 lg:py-3">Comentário da evolução<ColumnResizeHandle onMouseDown={event => startColumnResize("comentarioEvolucao", event)} /></th>}
           </tr>
         </thead>
         <tbody>
@@ -666,9 +727,14 @@ export default function StopSchedulePage() {
                 setDragOverSector(null);
               }}
               onSelect={openActivity}
+              trackingActivities={trackingActivities}
+              savingProgress={savingProgress}
+              onProgressChange={saveProgress}
+              savingComment={savingComment}
+              onCommentChange={saveEvolutionComment}
             />
           ))}
-          {filteredActivities.length === 0 && <tr><td colSpan={7} className="h-32 px-6 text-center"><CalendarClock className="mx-auto text-slate-300" size={28} /><p className="mt-2 font-semibold text-slate-500">Nenhuma atividade encontrada neste dia. Selecione outra data no cabeçalho.</p></td></tr>}
+          {filteredActivities.length === 0 && <tr><td colSpan={trackingActivities ? 8 : 7} className="h-32 px-6 text-center"><CalendarClock className="mx-auto text-slate-300" size={28} /><p className="mt-2 font-semibold text-slate-500">Nenhuma atividade encontrada neste dia. Selecione outra data no cabeçalho.</p></td></tr>}
         </tbody>
       </table></div>
       </> : <div className="grid min-h-52 place-items-center p-8 text-center"><div><CalendarClock className="mx-auto text-slate-300" size={34} /><p className="mt-3 font-semibold text-slate-500">Nenhuma atividade cadastrada para esta parada.</p></div></div>}
@@ -755,6 +821,11 @@ function SectorRows({
   onDrop,
   onDragEnd,
   onSelect,
+  trackingActivities,
+  savingProgress,
+  onProgressChange,
+  savingComment,
+  onCommentChange,
 }: {
   sector: string;
   activities: Activity[];
@@ -769,6 +840,11 @@ function SectorRows({
   onDrop: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   onSelect: (activity: Activity) => void;
+  trackingActivities: boolean;
+  savingProgress: Record<string, boolean>;
+  onProgressChange: (activity: Activity, value: number) => void;
+  savingComment: Record<string, boolean>;
+  onCommentChange: (activity: Activity, value: string) => void;
 }) {
   return <>
     <tr
@@ -786,7 +862,7 @@ function SectorRows({
           : "bg-brand-50 hover:bg-brand-100/70"
       }`}
     >
-      <th colSpan={7} className="px-4 py-2.5">
+      <th colSpan={trackingActivities ? 8 : 7} className="px-4 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <div
             onClick={onToggleCollapse}
@@ -828,8 +904,42 @@ function SectorRows({
       <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 text-slate-700">{activity.equipe || "—"}</td>
       <td onClick={() => onSelect(activity)} className="cursor-pointer px-3 py-2.5 text-slate-700">{activity.observacoes || "—"}</td>
       <td className="px-3 py-2 min-w-[320px]">
-        <GanttBar activity={activity} bounds={bounds} onClick={() => onSelect(activity)} />
+        <div className="flex items-center gap-2">
+          {trackingActivities && <label className="relative block w-20 shrink-0">
+            <input
+              key={`${activity.id}-${activity.percentualConclusao ?? 0}`}
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              defaultValue={activity.percentualConclusao ?? 0}
+              disabled={!activity.id || savingProgress[activity.id]}
+              onClick={event => event.stopPropagation()}
+              onBlur={event => onProgressChange(activity, Number(event.currentTarget.value))}
+              onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}
+              aria-label={`Evolução de ${activity.descricao}`}
+              className="h-9 w-full rounded-lg border border-slate-300 bg-white px-2 pr-6 text-center text-sm font-bold text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:opacity-60"
+            />
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+          </label>}
+          <GanttBar activity={activity} bounds={bounds} onClick={() => onSelect(activity)} />
+        </div>
       </td>
+      {trackingActivities && <td className="px-2 py-2">
+        <input
+          key={`${activity.id}-${activity.comentarioEvolucao ?? ""}`}
+          type="text"
+          defaultValue={activity.comentarioEvolucao ?? ""}
+          disabled={!activity.id || savingComment[activity.id]}
+          onClick={event => event.stopPropagation()}
+          onBlur={event => onCommentChange(activity, event.currentTarget.value)}
+          onKeyDown={event => { if (event.key === "Enter" && event.ctrlKey) event.currentTarget.blur(); }}
+          placeholder="Informar comentário"
+          aria-label={`Comentário da evolução de ${activity.descricao}`}
+          className="stop-evolution-comment-input h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:opacity-60"
+        />
+        <span className="stop-evolution-comment-print hidden whitespace-normal break-words">{activity.comentarioEvolucao || "—"}</span>
+      </td>}
     </tr>)}
   </>;
 }
@@ -862,6 +972,17 @@ function activityDurationMinutes(activity: Activity, bounds: TimelineBounds) {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
 }
 
+function activityProgressState(activity: Activity) {
+  const progress = Math.max(0, Math.min(100, Number(activity.percentualConclusao) || 0));
+  if (progress >= 100) return { label: "Concluída", bar: "bg-emerald-500", border: "border-emerald-300" };
+  if (progress > 0) return { label: "Em andamento", bar: "bg-amber-400", border: "border-amber-300" };
+  const scheduledStart = new Date(`${activity.dataInicio || "9999-12-31"}T${activity.horaInicio || "00:00"}:00`);
+  if (!Number.isNaN(scheduledStart.getTime()) && Date.now() >= scheduledStart.getTime()) {
+    return { label: "Não iniciada", bar: "bg-red-500", border: "border-red-300" };
+  }
+  return { label: "Programada", bar: "bg-blue-600", border: "border-blue-300" };
+}
+
 function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: TimelineBounds; onClick: () => void }) {
   const hasTimes = Boolean(activity.dataInicio && activity.horaInicio && activity.dataFim && activity.horaFim);
   const activityStartDate = activity.dataInicio || bounds.stop.inicio;
@@ -876,15 +997,17 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
 
   const timeLabel = hasTimes ? `${activity.horaInicio} - ${activity.horaFim}` : `${bounds.stop.horaInicio} - ${bounds.stop.horaFim}`;
   const duration = activityDuration(activity, bounds);
+  const progressState = activityProgressState(activity);
+  const progress = Math.max(0, Math.min(100, Number(activity.percentualConclusao) || 0));
 
   return (
     <div
       onClick={onClick}
-      title={`${activity.descricao} | Horário: ${timeLabel} | Duração: ${duration}`}
+      title={`${activity.descricao} | ${progressState.label}: ${progress}% | Horário: ${timeLabel} | Duração: ${duration}`}
       className="group/gantt flex h-10 w-full cursor-pointer items-center gap-2"
     >
       <div
-        className="grid h-10 min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm transition group-hover/gantt:border-blue-300"
+        className={`grid h-10 min-w-0 flex-1 overflow-hidden rounded-xl border bg-slate-100 shadow-sm transition ${progressState.border}`}
         style={{ gridTemplateColumns: `repeat(${Math.max(bounds.days.length, 1)}, minmax(0, 1fr))` }}
       >
         {bounds.days.map(day => {
@@ -893,7 +1016,7 @@ function GanttBar({ activity, bounds, onClick }: { activity: Activity; bounds: T
           const allocatedMinutes = Math.max(0, Math.min(8 * 60, remainingMinutes));
           return <span key={day.dateStr} className="relative overflow-hidden border-r border-slate-300/90 bg-slate-100 last:border-r-0">
             {allocatedMinutes > 0 && <span
-              className="absolute inset-y-0 left-0 flex items-center justify-center bg-gradient-to-r from-blue-700 to-blue-500 px-1 text-center text-[10px] font-extrabold leading-none text-white transition-all group-hover/gantt:brightness-110"
+              className={`absolute inset-y-0 left-0 flex items-center justify-center px-1 text-center text-[10px] font-extrabold leading-none text-white transition-all group-hover/gantt:brightness-110 ${progressState.bar}`}
               style={{ width: "100%" }}
               title={`${formatDuration(allocatedMinutes)} programadas em ${day.fullDate}`}
             >

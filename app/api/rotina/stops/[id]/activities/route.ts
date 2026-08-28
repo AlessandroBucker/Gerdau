@@ -57,7 +57,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     if (eventError) throw eventError;
     const [{ data, error }, { data: sectorRows, error: sectorsError }] = await Promise.all([
       supabase.from("parada_atividades")
-      .select("id, sequencia, especialidade, ordem, atividade, responsavel_apr, equipe, observacao, data_inicio, hora_inicio, data_fim, hora_fim, duracao_prevista_minutos, permite_sabado, permite_domingo, status, reprogramada, quantidade_reprogramacoes, setores(nome, ordem_exibicao)")
+      .select("id, sequencia, especialidade, ordem, atividade, responsavel_apr, equipe, observacao, data_inicio, hora_inicio, data_fim, hora_fim, duracao_prevista_minutos, percentual_conclusao, comentario_evolucao, permite_sabado, permite_domingo, status, reprogramada, quantidade_reprogramacoes, setores(nome, ordem_exibicao)")
       .eq("evento_id", id).order("sequencia"),
       supabase.from("setores").select("nome").eq("area_id", event.area_id).eq("ativo", true).order("ordem_exibicao").order("nome"),
     ]);
@@ -71,6 +71,8 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
       dataInicio: row.data_inicio, horaInicio: row.hora_inicio?.slice(0, 5) ?? "",
       dataFim: row.data_fim, horaFim: row.hora_fim?.slice(0, 5) ?? "",
       duracaoPrevistaMinutos: row.duracao_prevista_minutos,
+      percentualConclusao: row.percentual_conclusao ?? 0,
+      comentarioEvolucao: row.comentario_evolucao ?? "",
       permiteSabado: row.permite_sabado ?? false, permiteDomingo: row.permite_domingo ?? false,
       status: row.status, reprogramada: row.reprogramada, quantidadeReprogramacoes: row.quantidade_reprogramacoes,
     }));
@@ -108,9 +110,36 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const { id } = await context.params;
     const body = await request.json();
     const supabase = createSupabaseAdmin();
-    const { data: belongs, error: belongsError } = await supabase.from("parada_atividades").select("id").eq("id", body.atividadeId).eq("evento_id", id).maybeSingle();
+    const { data: belongs, error: belongsError } = await supabase.from("parada_atividades").select("id, percentual_conclusao").eq("id", body.atividadeId).eq("evento_id", id).maybeSingle();
     if (belongsError) throw belongsError;
     if (!belongs) return NextResponse.json({ error: "Atividade não encontrada nesta parada." }, { status: 404 });
+    if (body.action === "progress") {
+      const percentualConclusao = Number(body.percentualConclusao);
+      if (!Number.isInteger(percentualConclusao) || percentualConclusao < 0 || percentualConclusao > 100) {
+        return NextResponse.json({ error: "Informe um percentual inteiro entre 0 e 100." }, { status: 400 });
+      }
+      const status = percentualConclusao === 100 ? "concluida" : percentualConclusao > 0 ? "em_andamento" : "programada";
+      const { error: updateError } = await supabase.from("parada_atividades")
+        .update({ percentual_conclusao: percentualConclusao, status }).eq("id", body.atividadeId).eq("evento_id", id);
+      if (updateError) throw updateError;
+      const { error: historyError } = await supabase.from("parada_atividade_evolucoes")
+        .insert({ atividade_id: body.atividadeId, percentual_conclusao: percentualConclusao });
+      if (historyError) throw historyError;
+      return NextResponse.json({ ok: true, percentualConclusao, status });
+    }
+    if (body.action === "progress-comment") {
+      const comentarioEvolucao = clean(body.comentarioEvolucao);
+      if (comentarioEvolucao.length > 1000) {
+        return NextResponse.json({ error: "O comentário deve ter no máximo 1.000 caracteres." }, { status: 400 });
+      }
+      const { error: updateError } = await supabase.from("parada_atividades")
+        .update({ comentario_evolucao: comentarioEvolucao || null }).eq("id", body.atividadeId).eq("evento_id", id);
+      if (updateError) throw updateError;
+      const { error: historyError } = await supabase.from("parada_atividade_evolucoes")
+        .insert({ atividade_id: body.atividadeId, percentual_conclusao: belongs.percentual_conclusao ?? 0, comentario: comentarioEvolucao || null });
+      if (historyError) throw historyError;
+      return NextResponse.json({ ok: true, comentarioEvolucao });
+    }
     if (body.action === "edit") {
       const values = await activityValues(id, body);
       const { error } = await supabase.from("parada_atividades").update(values).eq("id", body.atividadeId).eq("evento_id", id);
