@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { saveEmployeePeriod } from "@/lib/save-employee-period";
+import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export async function GET() {
       .eq("tipos_evento.slug", "ferias").neq("status", "cancelado").order("data_inicio");
     if (error) throw error;
     const vacations = (data ?? []).map((row: any) => ({
-      id: row.id, nome: row.titulo, inicio: row.data_inicio, fim: row.data_fim,
+      id: row.id, tipo_registro: "ferias", nome: row.titulo, inicio: row.data_inicio, fim: row.data_fim,
       area: (Array.isArray(row.areas) ? row.areas[0] : row.areas)?.nome ?? "",
       np: row.evento_colaboradores?.[0]?.colaboradores?.numero_pessoal ?? "",
     }));
@@ -20,3 +21,6 @@ export async function GET() {
     return NextResponse.json({ error: "Não foi possível carregar as férias." }, { status: 500 });
   }
 }
+
+export async function POST(request: NextRequest) { return saveEmployeePeriod(request, "ferias"); }
+export async function PATCH(request: NextRequest) { return saveEmployeePeriod(request, "ferias"); }

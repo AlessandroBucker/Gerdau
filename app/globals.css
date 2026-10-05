@@ -2,6 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Compact collection overview; keep the editing dialog at its normal size. */
+.oil-dashboard > header { margin-bottom: 12px; gap: 8px; }
+.oil-dashboard > header h1 { font-size: 24px; line-height: 30px; }
+.oil-dashboard > header p { margin-top: 4px; font-size: 12px; }
+.oil-dashboard > header .p-3 { padding: 8px; }
+.oil-dashboard > header button { padding: 8px 12px; font-size: 12px; }
+.oil-dashboard > [aria-label="Filtrar coletas"] { margin-bottom: 12px; gap: 8px; }
+.oil-dashboard > [aria-label="Filtrar coletas"] button {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 10px 14px; border-radius: 12px;
+}
+.oil-dashboard > [aria-label="Filtrar coletas"] button span:first-child { font-size: 11px; }
+.oil-dashboard > [aria-label="Filtrar coletas"] button span:last-child { margin: 0; font-size: 22px; line-height: 26px; }
+#oil-collections { border-radius: 12px; }
+#oil-collections > div:first-child {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 4px 12px; padding: 8px 12px;
+}
+#oil-collections h2 { font-size: 14px; line-height: 20px; }
+#oil-collections > div:first-child p { margin: 0; font-size: 11px; }
+#oil-collections table { min-width: 1120px; font-size: 11px; line-height: 15px; }
+#oil-collections th { padding: 8px 6px; font-size: 10px; line-height: 13px; }
+#oil-collections td { padding: 5px 6px; }
+#oil-collections td:first-child { min-width: 0; font-weight: 600; }
+#oil-collections td:nth-child(3),
+#oil-collections td:nth-child(4) { white-space: nowrap; }
+#oil-collections td:nth-child(8) { min-width: 90px; max-width: 180px; }
+#oil-collections td span.rounded-full { padding: 2px 6px; font-size: 10px; line-height: 14px; }
+#oil-collections td button { display: inline-flex; padding: 2px; }
+#oil-collections td button svg { width: 14px; height: 14px; }
+#oil-collections .oil-period-table { min-width: 1000px; }
+#oil-collections .oil-period-table td:first-child { width: 90px; white-space: nowrap; }
+#oil-collections .oil-period-table td:nth-child(2) { max-width: 310px; white-space: normal; font-weight: 600; }
+#oil-collections .oil-period-table td:nth-child(8) { min-width: 0; max-width: none; }
+#oil-collections .oil-period-table td:nth-child(7) { max-width: 140px; overflow-wrap: anywhere; white-space: pre-wrap; }
+
 :root {
   color-scheme: light;
 }
