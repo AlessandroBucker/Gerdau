@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, LoaderCircle, LockKeyhole, Palmtree, Pencil, Plus, X } from "lucide-react";
 import { DataLoading } from "@/components/data-loading";
 
-type Vacation = { id: string; area: string; nome: string; np: string; inicio: string; fim: string };
+type Vacation = { id: string; area: string; nome: string; np: string; inicio: string; fim: string; tipo_registro: string };
 type SortKey = "area" | "nome" | "np" | "inicio" | "fim" | "dias" | "status";
 
 function localDate(iso: string) {
@@ -36,9 +36,12 @@ export function FeriasDashboard() {
   const [editing, setEditing] = useState<Vacation | null | "new">(null);
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetch("/api/rotina/vacations", { cache: "no-store" }).then(response => response.json()).then(data => { if (data.vacations) setVacations(data.vacations); }).finally(() => setLoading(false)); }, []);
+  useEffect(() => { fetch("/api/rotina/vacations", { cache: "no-store" }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setVacations(data.vacations); }).catch(error => setLoadError(error.message || "Falha ao carregar registros.")).finally(() => setLoading(false)); }, []);
 
   const sorted = useMemo(() => [...vacations].sort((a, b) => {
     const value = (item: Vacation) => sort.key === "dias" ? daysBetween(item.inicio, item.fim) : sort.key === "status" ? statusOf(item) : item[sort.key];
@@ -83,6 +86,7 @@ export function FeriasDashboard() {
       if (!response.ok) throw new Error(data.error || "Usuário ou senha inválidos.");
       const action = authAction;
       setAuthAction(null);
+      setSaveError("");
       setEditing(action === "edit" ? vacations.find(item => item.id === selectedId) ?? null : "new");
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Não foi possível validar o acesso.");
@@ -91,24 +95,30 @@ export function FeriasDashboard() {
     }
   }
 
-  function saveVacation(event: FormEvent<HTMLFormElement>) {
+  async function saveVacation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
+    setSaveError("");
     const form = new FormData(event.currentTarget);
-    const values = {
-      area: String(form.get("area")), nome: String(form.get("nome")), np: String(form.get("np")),
-      inicio: String(form.get("inicio")), fim: String(form.get("fim")),
-    };
-    if (values.fim < values.inicio) return;
-    if (editing === "new") {
-      setVacations(items => [...items, { id: crypto.randomUUID(), ...values }]);
-    } else if (editing) {
-      setVacations(items => items.map(item => item.id === editing.id ? { ...item, ...values } : item));
-    }
-    setEditing(null);
+    setSaving(true);
+    try {
+      const response = await fetch("/api/rotina/vacations", {
+        method: editing === "new" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editing && editing !== "new" ? editing.id : undefined,
+          area: form.get("area"), nome: form.get("nome"), np: form.get("np"), inicio: form.get("inicio"), fim: form.get("fim") }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Falha ao salvar.");
+      setVacations(items => editing === "new" ? [...items, data.item] : items.map(item => item.id === data.item.id ? data.item : item));
+      setEditing(null);
+    } catch (error) { setSaveError(error instanceof Error ? error.message : "Falha ao salvar."); }
+    finally { setSaving(false); }
   }
 
   return (
     <div>
+      {loadError && <p role="alert" className="mb-4 text-red-600">{loadError}</p>}
       <header className="mb-8">
         <div className="flex items-center gap-3"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><Palmtree size={24} /></span><h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Férias de colaboradores</h1></div>
       </header>
@@ -130,7 +140,7 @@ export function FeriasDashboard() {
 
       {viewingId && vacations.find(item => item.id === viewingId) && <VacationDetails item={vacations.find(item => item.id === viewingId)!} onClose={() => setViewingId(null)} onEdit={editFromDetails} />}
       {authAction && <AuthModal loading={authLoading} error={authError} onClose={() => setAuthAction(null)} onSubmit={authenticate} />}
-      {editing && <VacationForm item={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSubmit={saveVacation} />}
+      {editing && <VacationForm saving={saving} error={saveError} item={editing === "new" ? null : editing} onClose={() => { if (!saving) setEditing(null); }} onSubmit={saveVacation} />}
     </div>
   );
 }
@@ -156,8 +166,8 @@ function AuthModal({ loading, error, onClose, onSubmit }: { loading: boolean; er
   return <Modal title="Acesso restrito" onClose={onClose} icon={<LockKeyhole size={21} />}><p className="mb-5 text-sm text-slate-500">Informe o usuário e a senha administrativos para continuar.</p><form onSubmit={onSubmit} className="space-y-4"><Field label="Usuário" name="username" autoComplete="username" /><Field label="Senha" name="password" type="password" autoComplete="current-password" />{error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}<button disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-3 font-bold text-white hover:bg-brand-700 disabled:opacity-60">{loading && <LoaderCircle size={17} className="animate-spin" />}{loading ? "Validando..." : "Entrar e continuar"}</button></form></Modal>;
 }
 
-function VacationForm({ item, onClose, onSubmit }: { item: Vacation | null; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <Modal title={item ? "Editar férias" : "Adicionar férias"} onClose={onClose} icon={item ? <Pencil size={20} /> : <Plus size={21} />}><form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2"><div className="sm:col-span-2"><Field label="Nome do colaborador" name="nome" defaultValue={item?.nome} /></div><Field label="Área" name="area" defaultValue={item?.area ?? "Laminação 1"} /><Field label="NP" name="np" defaultValue={item?.np} required={false} /><Field label="Data de início" name="inicio" type="date" defaultValue={item?.inicio} /><Field label="Data de fim" name="fim" type="date" defaultValue={item?.fim} /><div className="mt-2 flex gap-2 sm:col-span-2"><button type="button" onClick={onClose} className="flex-1 rounded-xl border border-slate-200 px-4 py-3 font-bold text-slate-600">Cancelar</button><button className="flex-1 rounded-xl bg-brand-600 px-4 py-3 font-bold text-white hover:bg-brand-700">Salvar</button></div></form></Modal>;
+function VacationForm({ item, onClose, onSubmit, saving, error }: { saving: boolean; error: string; item: Vacation | null; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <Modal title={item ? "Editar férias" : "Adicionar férias"} onClose={onClose} icon={item ? <Pencil size={20} /> : <Plus size={21} />}><form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2"><div className="sm:col-span-2"><Field label="Nome do colaborador" name="nome" defaultValue={item?.nome} /></div><Field label="Área" name="area" defaultValue={item?.area ?? "Laminação 1"} /><Field label="NP" name="np" defaultValue={item?.np} required={false} /><Field label="Data de início" name="inicio" type="date" defaultValue={item?.inicio} /><Field label="Data de fim" name="fim" type="date" defaultValue={item?.fim} /><div className="mt-2 flex gap-2 sm:col-span-2"><button type="button" onClick={onClose} className="flex-1 rounded-xl border border-slate-200 px-4 py-3 font-bold text-slate-600">Cancelar</button><button disabled={saving} className="disabled:opacity-60 flex-1 rounded-xl bg-brand-600 px-4 py-3 font-bold text-white hover:bg-brand-700">{saving ? "Salvando..." : "Salvar"}</button></div>{error && <p role="alert" className="text-sm text-red-600 sm:col-span-2">{error}</p>}</form></Modal>;
 }
 
 function Modal({ title, icon, onClose, children }: { title: string; icon: React.ReactNode; onClose: () => void; children: React.ReactNode }) {

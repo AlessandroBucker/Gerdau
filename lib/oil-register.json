@@ -1,0 +1,17 @@
+[
+  {"plano":"61935","descricao":"D-AO-3M-COLETA-TANQ-C.LUBRIF-DESB2","tag":"URS-LA1-DESB2-CH","tipo_oleo":"Não informado","local":"1402-LA1-TDES-DGE01","ponto":"","tipo_equipamento":"","volume_reservatorio":null},
+  {"plano":"61940","descricao":"BLOCO MORGAN - TANQUE 2","tag":"URS-LA1-BM-T2","tipo_oleo":"VACUOLINE 525","local":"1402-LA1-TREA-BMO01","ponto":"N.A","tipo_equipamento":"Mancal de Deslize","volume_reservatorio":15000},
+  {"plano":"67899","descricao":"MESA BASCULANTE - CENTRAL HIDRAULICA","tag":"URS-LA1-MB-CH","tipo_oleo":"ISO VG 68","local":"1402-LA1-TDES","ponto":"N.A","tipo_equipamento":"Sistema Hidráulico","volume_reservatorio":2000},
+  {"plano":"61939","descricao":"BLOCO MORGAN - TANQUE 1","tag":"URS-LA1-BM-T1","tipo_oleo":"VACUOLINE 525","local":"1402-LA1-TREA-CLU01","ponto":"N.A","tipo_equipamento":"Mancal de Deslize","volume_reservatorio":15000},
+  {"plano":"61941","descricao":"CADEIRA BASCULANTE - REDUTORA","tag":"URS-LA1-CB-R","tipo_oleo":"ISO VG 220","local":"1402-LA1-SAI1-CBA01","ponto":"N.A","tipo_equipamento":"Redutor","volume_reservatorio":60},
+  {"plano":"65929","descricao":"COLETOR SAIDA DE ROLO - REDUTOR","tag":"URS-LA1-CSR-R","tipo_oleo":"IPIRANGA SP 150","local":"1402-LA1-SAI1-CES01","ponto":"N.A","tipo_equipamento":"Redutor","volume_reservatorio":80},
+  {"plano":"64385","descricao":"DESBASTE 1- SISTEMA LUBRIFICACAO - D1","tag":"URS-LA1-DSB1-CL","tipo_oleo":"SP 320","local":"1402-LA1-TDES-CLU02","ponto":"N.A","tipo_equipamento":"Redutor","volume_reservatorio":3800},
+  {"plano":"65927","descricao":"PRENSA2 DE ROLOS - CENTRAL HIDRAULICA","tag":"URS-LA1-PR2-CH","tipo_oleo":"IPIRANGA SP 68","local":"1402-LA1-SAI1-MPR02","ponto":"N.A","tipo_equipamento":"Sistema Hidráulico","volume_reservatorio":1200},
+  {"plano":"65931","descricao":"TRANSPORTADOR DE CORRENTES(DESBASTE) - REDUTOR","tag":"URS-LA1-TC-R","tipo_oleo":"ISO VG 150","local":"1402-LA1-TDES-TCO01","ponto":"N.A","tipo_equipamento":"Redutor","volume_reservatorio":80},
+  {"plano":"65930","descricao":"TRANSPORTADOR DE ESPIRAS SAIDA DE ROLO - REDUTOR","tag":"URS-LA1-TES-R","tipo_oleo":"ISO VG 220","local":"1402-LA1-SAI1-TES01","ponto":"N.A","tipo_equipamento":"Redutor","volume_reservatorio":500},
+  {"plano":"63850","descricao":"LPP ACIONAMENTO LEITO - REDUTORA","tag":"URS-LP1-LPP-AL","tipo_oleo":"ISO VG 150","local":"1402-LA1-LPPE-LRE01-LRE","ponto":"N.A","tipo_equipamento":"Redutor","volume_reservatorio":80},
+  {"plano":"178356","descricao":"LPP GAIOLA 1 - REDUTORA","tag":"URS-LP1-LPP-G1","tipo_oleo":"ISO VG 150","local":"1402-LA1-LPPE-GLA01","ponto":"N.A","tipo_equipamento":"Redutor","volume_reservatorio":80},
+  {"plano":"178357","descricao":"LPP GAIOLA 2 - REDUTORA","tag":"URS-LP1-LPP-G2","tipo_oleo":"ISO VG 150","local":"1402-LA1-LPPE-GLA02","ponto":"N.A","tipo_equipamento":"Redutor","volume_reservatorio":80},
+  {"plano":"177085","descricao":"LPP TESOURA - REDUTORA","tag":"URS-LP1-LPP-TES","tipo_oleo":"ISO VG 150","local":"1402-LA1-LPPE-TRO01","ponto":"N.A","tipo_equipamento":"Redutor","volume_reservatorio":80},
+  {"plano":"61934","descricao":"PRENSA1 DE ROLOS - CENTRAL HIDRAULICA","tag":"URS-LA1-PR1-CH","tipo_oleo":"ISO VG 68","local":"1402-LA1-SAI1-MPR01","ponto":"TAMPA DE ABASTECIMENTO","tipo_equipamento":"Sistema Hidráulico","volume_reservatorio":1000}
+]

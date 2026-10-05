@@ -1,10 +1,13 @@
 "use client";
 
 import { CalendarDays, ChevronLeft, ChevronRight, Printer } from "lucide-react";
-import { useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type ViewMode = "month" | "week";
-type Shift = "P" | "Q" | "5X2";
+import { initialTeam, isTeam, Shift, TeamPerson, teamTitles } from "@/lib/plantao-team";
+import { PlantaoTeamEditor } from "@/components/plantao-team-editor";
+
+const TEAM_STORAGE_KEY = "portal-pdfs.plantao-team.v1";
 
 const CYCLE_ANCHOR = new Date(2026, 7, 1, 12);
 const START = new Date(2026, 6, 1, 12);
@@ -65,6 +68,62 @@ function sundayFromWeek(value: string) {
 }
 
 export function PlantaoCalendar() {
+  const [people, setPeople] = useState<TeamPerson[]>(initialTeam);
+  const [ready, setReady] = useState(false);
+  const [managing, setManaging] = useState(false);
+  const [storageError, setStorageError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [localPeople, setLocalPeople] = useState<TeamPerson[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [login, setLogin] = useState(false);
+  const [loginBusy, setLoginBusy] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TEAM_STORAGE_KEY);
+      if (raw !== null) {
+        const parsed: unknown = JSON.parse(raw);
+        if (isTeam(parsed)) setLocalPeople(parsed);
+      }
+    } catch { /* Local storage is optional; server data remains available. */ }
+    fetch("/api/rotina/plantao", { cache: "no-store" }).then(async response => {
+      const data = await response.json();
+      if (!response.ok || !isTeam(data.people)) throw new Error(data.error || "Falha ao carregar dados.");
+      setPeople(data.people); setReady(true);
+    }).catch(error => setStorageError(error.message));
+  }, []);
+  async function savePeople(next: TeamPerson[], importing = false) {
+    if (saving) return false;
+    setSaved(false); setStorageError(""); setSaving(true);
+    try {
+      if (!isTeam(next)) throw new Error("Dados invalidos.");
+      const changed = importing ? next : next.filter(person => JSON.stringify(person) !== JSON.stringify(people.find(item => item.id === person.id)));
+      if (!changed.length) return true;
+      const response = await fetch("/api/rotina/plantao", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ people: changed }) });
+      const data = await response.json();
+      if (response.status === 401) setLogin(true);
+      if (!response.ok) throw new Error(data.error || "Falha ao salvar.");
+      if (!isTeam(data.people)) throw new Error("Resposta invalida do banco.");
+      const rows: TeamPerson[] = data.people;
+      setPeople(current => [...current.map(person => rows.find(row => row.id === person.id) ?? person), ...rows.filter(row => !current.some(person => person.id === row.id))]);
+      if (importing) {
+        try { localStorage.removeItem(TEAM_STORAGE_KEY); } catch { /* Keep the local backup if storage is unavailable. */ }
+        setLocalPeople(null);
+      }
+      setSaved(true); return true;
+    } catch (error) { setStorageError(error instanceof Error ? error.message : "Falha ao salvar no banco."); return false; }
+    finally { setSaving(false); }
+  }
+  async function authenticate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setLoginBusy(true); setStorageError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: form.get("username"), password: form.get("password") }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Falha no acesso.");
+      setLogin(false);
+    } catch (error) { setStorageError(error instanceof Error ? error.message : "Falha no acesso."); }
+    finally { setLoginBusy(false); }
+  }
   const now = atNoon(new Date());
   const initialMonth = new Date(now.getFullYear(), now.getMonth(), 1, 12);
   const currentWeekStart = addDays(now, -now.getDay());
@@ -133,17 +192,10 @@ export function PlantaoCalendar() {
 
       <div>
       <section className="calendar-team-print mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
-        <div className="border-b border-slate-100 px-3 py-2.5"><h2 className="text-sm font-bold text-slate-900">Colaboradores por equipe</h2></div>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2.5"><h2 className="text-sm font-bold text-slate-900">Colaboradores por equipe</h2><button type="button" disabled={!ready} onClick={() => setManaging(value => !value)} className="calendar-print-hide rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">Gerenciar linhas</button></div>
         <div className="overflow-x-auto p-2.5">
-          <TeamTable
-            titles={["Mec. dia", "Mec. noite", "Ele. dia", "Ele. noite"]}
-            columns={[
-              [{ name: "Mauricio", shift: "P" }, { name: "Marcos", shift: "Q" }, { name: "Everton", shift: "5X2" }],
-              [{ name: "Nelson", shift: "P" }, { name: "Luciano", shift: "Q" }],
-              [{ name: "Charles", shift: "P" }, { name: "Cleber", shift: "Q" }],
-              [{ name: "Lucas", shift: "P" }, { name: "Wagner", shift: "Q" }],
-            ]}
-          />
+          <TeamTable titles={[...teamTitles]} columns={teamTitles.map((_, team) => people.filter(person => person.active && person.team === team))} />
+          {people.every(person => !person.active) && <p className="p-3 text-center text-sm text-slate-500">Nenhuma linha ativa. Use Gerenciar linhas para ativar ou criar uma.</p>}
         </div>
       </section>
       <section className="calendar-print-area min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
@@ -180,9 +232,9 @@ function ShiftTable({ dates, title }: { dates: Date[]; title: string }) {
   return <div className="w-full overflow-hidden"><table className="w-full table-fixed border-collapse"><thead><tr><th colSpan={dates.length} className="h-6 border-2 border-slate-900 bg-white p-0 text-center text-xs font-extrabold uppercase leading-none text-slate-950 sm:text-sm">{title}</th></tr><tr>{weekdayCells}</tr><tr>{dateCells}</tr></thead><tbody>{(["P", "Q", "5X2"] as Shift[]).map(shift => <tr key={shift}>{shiftCells(shift)}</tr>)}</tbody></table></div>;
 }
 
-function TeamTable({ titles, columns }: { titles: string[]; columns: { name: string; shift: Shift }[][] }) {
+function TeamTable({ titles, columns }: { titles: string[]; columns: TeamPerson[][] }) {
   const rows = Math.max(...columns.map(column => column.length));
-  return <table className="w-full min-w-[620px] table-fixed border-collapse text-center text-[9px] font-semibold uppercase tracking-wide"><thead><tr>{titles.map(title => <th key={title} className="border-2 border-slate-900 bg-white px-1 py-1.5 font-extrabold text-slate-900">{title}</th>)}</tr></thead><tbody>{Array.from({ length: rows }, (_, index) => <tr key={index}>{columns.map((column, columnIndex) => { const person = column[index]; return person ? <TeamCell key={person.name} name={person.name} shift={person.shift} /> : <td key={columnIndex} className="border border-slate-700 bg-slate-100" />; })}</tr>)}</tbody></table>;
+  return <table className="w-full min-w-[620px] table-fixed border-collapse text-center text-[9px] font-semibold uppercase tracking-wide"><thead><tr>{titles.map(title => <th key={title} className="border-2 border-slate-900 bg-white px-1 py-1.5 font-extrabold text-slate-900">{title}</th>)}</tr></thead><tbody>{Array.from({ length: rows }, (_, index) => <tr key={index}>{columns.map((column, columnIndex) => { const person = column[index]; return person ? <TeamCell key={person.id} name={person.name} shift={person.shift} /> : <td key={columnIndex} className="border border-slate-700 bg-slate-100" />; })}</tr>)}</tbody></table>;
 }
 
 function TeamCell({ name, shift }: { name: string; shift: Shift }) {

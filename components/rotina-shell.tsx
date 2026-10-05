@@ -4,11 +4,13 @@ import {
   CalendarDays,
   ChevronRight,
   Factory,
+  Activity,
   LayoutDashboard,
   Menu,
   PackageCheck,
   PanelsTopLeft,
   Palmtree,
+  GraduationCap,
   PanelLeftClose,
   PanelLeftOpen,
   X,
@@ -20,13 +22,15 @@ import { useEffect, useState } from "react";
 const navigation = [
   { label: "Visão geral", href: "/ROTINA", icon: LayoutDashboard },
   { label: "Férias de colaboradores", href: "/ROTINA/ferias", icon: Palmtree },
+  { label: "Treinamentos", href: "/ROTINA/treinamentos", icon: GraduationCap },
   { label: "Calendário do plantão", href: "/ROTINA/calendario-plantao", icon: CalendarDays },
   { label: "Paradas", href: "/ROTINA/paradas", icon: Factory },
+  { label: "Preditiva", href: "/ROTINA/preditiva", icon: Activity },
 ];
 
 export function RotinaShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const widePage = pathname === "/ROTINA/calendario-plantao" || pathname.startsWith("/ROTINA/paradas/");
+  const widePage = pathname === "/ROTINA/analises-oleo" || pathname === "/ROTINA/conjuntos-reservas" || pathname === "/ROTINA/conjuntos-sobressalentes" || pathname === "/ROTINA/calendario-plantao" || pathname.startsWith("/ROTINA/paradas/");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCollapsed, setMenuCollapsed] = useState(widePage);
 
@@ -63,7 +67,7 @@ export function RotinaShell({ children }: { children: React.ReactNode }) {
         <nav className={`flex-1 space-y-1 overflow-y-auto py-6 ${menuCollapsed ? "lg:px-3" : "px-4"}`} aria-label="Menu da rotina">
           <p className={`mb-3 px-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500 ${menuCollapsed ? "lg:hidden" : ""}`}>Navegação</p>
           {navigation.map(({ label, href, icon: Icon }) => {
-            const active = pathname === href;
+            const active = pathname === href || (href === "/ROTINA/preditiva" && (pathname.startsWith("/ROTINA/preditiva/") || pathname === "/ROTINA/analises-oleo"));
             return (
               <Link
                 key={href}
