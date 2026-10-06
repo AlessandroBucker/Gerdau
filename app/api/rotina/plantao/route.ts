@@ -6,7 +6,7 @@ import { isTeam } from "@/lib/plantao-team";
 export const dynamic = "force-dynamic";
 export async function GET() {
   try {
-    const { data, error } = await createSupabaseAdmin().from("plantao_equipe").select("id,name,shift,team,active").order("criado_em").order("id");
+    const { data, error } = await createSupabaseAdmin().from("plantao_equipe").select("id,name,shift,team,active,position").order("team").order("position").order("id");
     if (error) throw error;
     return NextResponse.json({ people: data }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return adminError(error, "Não foi possível carregar o plantão do banco. Verifique se a migração 019 foi aplicada."); }
@@ -21,8 +21,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Informe linhas válidas com nome, equipe, escala e situação." }, { status: 400 });
   }
   try {
-    const values = people.map(({ id, name, shift, team, active }) => ({ id, name: name.trim(), shift, team, active }));
-    const { data, error } = await createSupabaseAdmin().from("plantao_equipe").upsert(values, { onConflict: "id" }).select("id,name,shift,team,active");
+    const values = people.map(({ id, name, shift, team, active, position }) => ({ id, name: name.trim(), shift, team, active, ...(position === undefined ? {} : {position}) }));
+    const { data, error } = await createSupabaseAdmin().from("plantao_equipe").upsert(values, { onConflict: "id" }).select("id,name,shift,team,active,position");
     if (error) throw error;
     return NextResponse.json({ people: data });
   } catch (error) { return adminError(error, "Não foi possível salvar as linhas no banco de dados."); }
