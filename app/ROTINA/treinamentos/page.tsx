@@ -1,5 +1,6 @@
 import { TreinamentosDashboard } from "@/components/treinamentos-dashboard";
+import { TrainingDataProvider } from "@/components/training-data-provider";
 
 export default function TreinamentosPage() {
-  return <TreinamentosDashboard />;
+  return <TrainingDataProvider><TreinamentosDashboard /></TrainingDataProvider>;
 }

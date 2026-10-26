@@ -7,5 +7,6 @@ out
 .env.local
 *.log
 .vercel
+lib/backup-controle-treinamentos-*.json
 
 *.tsbuildinfo
