@@ -3,6 +3,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, LoaderCircle, LockKeyhole, GraduationCap, Pencil, Plus, X } from "lucide-react";
 import { DataLoading } from "@/components/data-loading";
+import { TreinamentosControl } from "@/components/treinamentos-control";
+import { TrainingRecordsProgram } from "@/components/training-records-program";
+import { TrainingCapacityMatrix } from "@/components/training-capacity-matrix";
 
 type Training = { id: string; area: string; nome: string; np: string; inicio: string; fim: string; tipo_registro: string };
 type SortKey = "area" | "nome" | "np" | "inicio" | "fim" | "dias" | "status";
@@ -28,6 +31,7 @@ function statusOf(item: Training) {
 }
 
 export function TreinamentosDashboard() {
+  const [workspaceTab, setWorkspaceTab] = useState<"treinamentos" | "agenda" | "matriz" | "cadastros">("treinamentos");
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "inicio", direction: "asc" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -41,7 +45,12 @@ export function TreinamentosDashboard() {
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetch("/api/rotina/trainings", { cache: "no-store" }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setTrainings(data.trainings); }).catch(error => setLoadError(error.message || "Falha ao carregar registros.")).finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    const load = () => fetch("/api/rotina/trainings", { cache: "no-store" }).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setTrainings(data.trainings); setLoadError(""); }).catch(error => setLoadError(error.message || "Falha ao carregar registros.")).finally(() => setLoading(false));
+    void load();
+    window.addEventListener("admin-session-ready", load);
+    return () => window.removeEventListener("admin-session-ready", load);
+  }, []);
 
   const sorted = useMemo(() => [...trainings].sort((a, b) => {
     const value = (item: Training) => sort.key === "dias" ? daysBetween(item.inicio, item.fim) : sort.key === "status" ? statusOf(item) : item[sort.key];
@@ -123,24 +132,29 @@ export function TreinamentosDashboard() {
         <div className="flex items-center gap-3"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-600"><GraduationCap size={24} /></span><h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Treinamentos</h1></div>
       </header>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
-        <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div><h2 className="text-lg font-bold text-slate-900">Programação de treinamentos</h2><p className="mt-1 text-sm text-slate-500">Clique em qualquer título para reorganizar a tabela.</p></div>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => requestAccess("add")} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700"><Plus size={17} /> Adicionar treinamento</button>
-          </div>
-        </div>
-        {loading ? <DataLoading label="Carregando treinamentos..." compact /> : <TrainingTable items={current} selectedId={selectedId} onSelect={openDetails} sort={sort} onSort={changeSort} emptyText="Nenhuma programação futura encontrada." />}
-      </section>
+      <nav className="mb-5 flex flex-wrap gap-2" aria-label="Telas de treinamentos">
+        <button onClick={() => setWorkspaceTab("treinamentos")} className={`rounded-lg px-4 py-2 text-sm font-bold ${workspaceTab === "treinamentos" ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>Treinamentos</button>
+        <button onClick={() => setWorkspaceTab("agenda")} className={`rounded-lg px-4 py-2 text-sm font-bold ${workspaceTab === "agenda" ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>Agenda</button>
+        <button onClick={() => setWorkspaceTab("matriz")} className={`rounded-lg px-4 py-2 text-sm font-bold ${workspaceTab === "matriz" ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>Matriz de capacitação</button>
+        <button onClick={() => setWorkspaceTab("cadastros")} className={`rounded-lg px-4 py-2 text-sm font-bold ${workspaceTab === "cadastros" ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>Cadastros e registros</button>
+      </nav>
 
-      <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
-        <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h2 className="text-lg font-bold text-slate-900">Treinamentos anteriores</h2><p className="mt-1 text-sm text-slate-500">Histórico de períodos já concluídos.</p></div>
-        {loading ? <DataLoading label="Carregando histórico..." compact /> : <TrainingTable items={previous} selectedId={selectedId} onSelect={openDetails} sort={sort} onSort={changeSort} emptyText="Ainda não há treinamentos anteriores cadastrados." />}
-      </section>
-
+      {workspaceTab === "treinamentos" ? <TrainingRecordsProgram /> : workspaceTab === "agenda" ? <div className="space-y-6">
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
+          <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6"><div><h2 className="text-lg font-bold text-slate-900">Agenda</h2><p className="mt-1 text-sm text-slate-500">Treinamentos agendados e realizados.</p></div><button onClick={() => requestAccess("add")} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700"><Plus size={17} /> Adicionar à agenda</button></div>
+          <div className="border-b border-slate-100 px-5 py-4 sm:px-6"><h3 className="font-bold text-slate-800">Treinamentos agendados</h3></div>
+          {loading ? <DataLoading label="Carregando agenda..." compact /> : <TrainingTable items={current} selectedId={selectedId} onSelect={openDetails} sort={sort} onSort={changeSort} emptyText="Nenhum treinamento agendado." />}
+        </section>
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
+          <div className="border-b border-slate-100 px-5 py-5 sm:px-6"><h3 className="font-bold text-slate-800">Treinamentos realizados</h3><p className="mt-1 text-sm text-slate-500">Eventos cuja data de término já passou.</p></div>
+          {loading ? <DataLoading label="Carregando histórico..." compact /> : <TrainingTable items={previous} selectedId={selectedId} onSelect={openDetails} sort={sort} onSort={changeSort} emptyText="Ainda não há treinamentos realizados." />}
+        </section>
+      </div> : workspaceTab === "matriz" ? <TrainingCapacityMatrix /> : <TreinamentosControl embedded />}
+      {workspaceTab === "agenda" && <>
       {viewingId && trainings.find(item => item.id === viewingId) && <TrainingDetails item={trainings.find(item => item.id === viewingId)!} onClose={() => setViewingId(null)} onEdit={editFromDetails} />}
       {authAction && <AuthModal loading={authLoading} error={authError} onClose={() => setAuthAction(null)} onSubmit={authenticate} />}
       {editing && <TrainingForm saving={saving} error={saveError} item={editing === "new" ? null : editing} onClose={() => { if (!saving) setEditing(null); }} onSubmit={saveTraining} />}
+      </>}
     </div>
   );
 }

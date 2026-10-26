@@ -1,10 +1,12 @@
 import { saveEmployeePeriod } from "@/lib/save-employee-period";
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase-admin";
+import { isAdminAuthenticated } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!await isAdminAuthenticated()) return NextResponse.json({ error: "Acesso não autorizado." }, { status: 401 });
   try {
     const { data, error } = await createSupabaseAdmin().from("eventos")
       .select("id, titulo, data_inicio, data_fim, areas(nome), tipos_evento!inner(slug), evento_colaboradores(colaboradores(numero_pessoal))")
